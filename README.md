@@ -1,6 +1,6 @@
 # Smart Location Service Provider
 
-A Node.js + Express + MongoDB backend for discovering verified local stores by state, city, and name with role-based modules for customers, owners, and admins.
+A Node.js + Express + MongoDB backend plus a built-in web UI for discovering verified local stores by state, city, and name with role-based flows for customers, owners, and admins.
 
 ## Implemented foundation
 
@@ -9,6 +9,7 @@ A Node.js + Express + MongoDB backend for discovering verified local stores by s
 - Public store discovery endpoints with filters (`state`, `city`, `category`, text query, `openNow`, `topRated`, nearest)
 - Admin approval/rejection/blocking and dashboard metrics
 - MongoDB geospatial indexing (`2dsphere`) for nearest-store queries
+- Browser UI at `/` with guided authentication, discovery, owner submission, and admin moderation flows
 
 ## Quick start
 
