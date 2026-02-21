@@ -8,6 +8,8 @@ async function register(req, res) {
     return res.status(400).json({ message: 'name, email and password are required' });
   }
 
+  const normalizedRole = role === 'owner' ? 'owner' : 'customer';
+
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) {
     return res.status(409).json({ message: 'Email already exists' });
@@ -19,7 +21,7 @@ async function register(req, res) {
     email,
     passwordHash,
     phone,
-    role: role || 'customer'
+    role: normalizedRole
   });
 
   const token = signToken({ id: user._id, role: user.role, email: user.email });
@@ -43,6 +45,9 @@ async function login(req, res) {
   const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) {
     return res.status(401).json({ message: 'Invalid credentials' });
+  }
+  if (user.isBlocked) {
+    return res.status(403).json({ message: 'Your account is blocked' });
   }
 
   const isValid = await bcrypt.compare(password, user.passwordHash);

@@ -6,7 +6,8 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     phone: { type: String, trim: true },
-    role: { type: String, enum: ['customer', 'owner', 'admin'], default: 'customer' }
+    role: { type: String, enum: ['customer', 'owner', 'admin'], default: 'customer' },
+    isBlocked: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

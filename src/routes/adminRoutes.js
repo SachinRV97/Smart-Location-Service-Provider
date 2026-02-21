@@ -1,10 +1,21 @@
 const express = require('express');
 const {
   approveStore,
+  blockUser,
   blockStore,
+  createCategory,
+  createLocation,
   dashboard,
+  listCategories,
+  listLocations,
+  listPendingReviews,
   listPendingStores,
-  rejectStore
+  listStores,
+  listUsers,
+  moderateReview,
+  rejectStore,
+  unblockStore,
+  unblockUser
 } = require('../controllers/adminController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -12,9 +23,23 @@ const router = express.Router();
 
 router.use(authenticate, authorize('admin'));
 router.get('/dashboard', dashboard);
+router.get('/stores', listStores);
 router.get('/stores/pending', listPendingStores);
 router.patch('/stores/:id/approve', approveStore);
 router.patch('/stores/:id/reject', rejectStore);
 router.patch('/stores/:id/block', blockStore);
+router.patch('/stores/:id/unblock', unblockStore);
+
+router.get('/users', listUsers);
+router.patch('/users/:id/block', blockUser);
+router.patch('/users/:id/unblock', unblockUser);
+
+router.get('/reviews/pending', listPendingReviews);
+router.patch('/reviews/:id/moderate', moderateReview);
+
+router.get('/categories', listCategories);
+router.post('/categories', createCategory);
+router.get('/locations', listLocations);
+router.post('/locations', createLocation);
 
 module.exports = router;

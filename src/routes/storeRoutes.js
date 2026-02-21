@@ -1,11 +1,17 @@
 const express = require('express');
-const { getStoreById, registerStore, searchStores } = require('../controllers/storeController');
-const { authenticate, authorize } = require('../middleware/auth');
+const {
+  getStoreById,
+  listMyStores,
+  registerStore,
+  searchStores
+} = require('../controllers/storeController');
+const { authenticate, optionalAuthenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/', searchStores);
-router.get('/:id', getStoreById);
+router.get('/', optionalAuthenticate, searchStores);
+router.get('/mine', authenticate, authorize('owner', 'admin'), listMyStores);
+router.get('/:id', optionalAuthenticate, getStoreById);
 router.post('/', authenticate, authorize('owner', 'admin'), registerStore);
 
 module.exports = router;

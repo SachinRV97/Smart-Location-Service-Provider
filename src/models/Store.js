@@ -33,7 +33,8 @@ const storeSchema = new mongoose.Schema(
     status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
     isBlocked: { type: Boolean, default: false },
     ratingAverage: { type: Number, default: 0 },
-    ratingCount: { type: Number, default: 0 }
+    ratingCount: { type: Number, default: 0 },
+    viewCount: { type: Number, default: 0 }
   },
   { timestamps: true }
 );

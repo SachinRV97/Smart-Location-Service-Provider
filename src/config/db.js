@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 async function connectDB(uri) {
-  console.log("Connecting to MongoDB...");
+  console.log('Connecting to MongoDB...');
 
   if (!uri) {
     throw new Error('MONGODB_URI is required');
@@ -10,7 +10,7 @@ async function connectDB(uri) {
   mongoose.set('strictQuery', true);
   await mongoose.connect(uri);
 
-  console.log("MongoDB Connected ✅");
+  console.log('MongoDB connected');
   return mongoose.connection;
 }
 

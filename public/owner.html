@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Owner Portal | Smart Location Service Provider</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="hero compact">
     <h1>Owner Portal</h1>
-    <p>Submit your store for admin review.</p>
+    <p>Register your business. Submitted stores stay pending until admin approval.</p>
   </header>
 
   <nav class="top-nav">
@@ -20,27 +21,83 @@
     <a class="nav-link" href="/admin.html">Admin Portal</a>
   </nav>
 
-  <main class="layout single-column">
+  <main class="layout two-column">
     <section class="card">
-      <h2>Submit store</h2>
-      <p class="hint">Requires <code>owner</code> or <code>admin</code> login.</p>
+      <h2>Store registration</h2>
+      <p class="hint">Requires <code>owner</code> or <code>admin</code> account login.</p>
       <div class="session-box">
         <p><strong>Current user:</strong> <span id="user-display">None</span></p>
       </div>
       <form id="store-form" class="grid-form">
-        <label>Store name <input name="storeName" required /></label>
-        <label>Category <input name="category" required /></label>
-        <label>State <input name="state" required /></label>
-        <label>City <input name="city" required /></label>
-        <label>Address <input name="address" /></label>
-        <label>Opening (HH:MM) <input name="openingTime" placeholder="09:00" /></label>
-        <label>Closing (HH:MM) <input name="closingTime" placeholder="18:00" /></label>
-        <button type="submit">Submit for approval</button>
+        <label>Store Name
+          <input name="storeName" required />
+        </label>
+        <label>Owner Name
+          <input name="ownerName" required />
+        </label>
+        <label>Email
+          <input name="email" type="email" required />
+        </label>
+        <label>Phone Number
+          <input name="phone" required />
+        </label>
+        <label>State
+          <select id="owner-state" name="state" required>
+            <option value="">Select State</option>
+          </select>
+        </label>
+        <label>City
+          <select id="owner-city" name="city" required>
+            <option value="">Select City</option>
+          </select>
+        </label>
+        <label>Full Address
+          <input name="fullAddress" required />
+        </label>
+        <label>Category
+          <select id="owner-category" name="category" required>
+            <option value="">Select Category</option>
+          </select>
+        </label>
+        <label>Opening Time (HH:MM)
+          <input name="openingTime" placeholder="09:00" />
+        </label>
+        <label>Closing Time (HH:MM)
+          <input name="closingTime" placeholder="18:00" />
+        </label>
+        <label>Description
+          <textarea name="description" rows="3" placeholder="Store description"></textarea>
+        </label>
+        <label>Image URLs (comma separated)
+          <input name="images" placeholder="https://..., https://..." />
+        </label>
+        <label>GST (Optional)
+          <input name="gst" />
+        </label>
+        <label>Latitude
+          <input id="owner-latitude" name="latitude" placeholder="19.0760" />
+        </label>
+        <label>Longitude
+          <input id="owner-longitude" name="longitude" placeholder="72.8777" />
+        </label>
+        <div class="button-row">
+          <button type="submit">Submit for Approval</button>
+          <button type="button" id="owner-detect-location" class="secondary">Use My Location</button>
+        </div>
       </form>
+      <h3>Your submitted stores</h3>
+      <ul id="owner-store-list" class="list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Pick exact location</h2>
+      <p class="hint">Drag marker to set latitude and longitude automatically.</p>
+      <div id="owner-map" class="map-box"></div>
     </section>
   </main>
 
   <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

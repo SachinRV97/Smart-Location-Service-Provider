@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Store Discovery | Smart Location Service Provider</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="hero compact">
     <h1>Store Discovery</h1>
-    <p>Search approved stores using filters.</p>
+    <p>Search by state, city, category, or store name and view stores on map.</p>
   </header>
 
   <nav class="top-nav">
@@ -20,23 +21,55 @@
     <a class="nav-link" href="/admin.html">Admin Portal</a>
   </nav>
 
-  <main class="layout single-column">
+  <main class="layout two-column">
     <section class="card">
       <h2>Find approved stores</h2>
       <form id="search-form" class="grid-form">
-        <label>Query <input name="q" placeholder="store or keyword" /></label>
-        <label>State <input name="state" placeholder="California" /></label>
-        <label>City <input name="city" placeholder="San Jose" /></label>
-        <label>Category <input name="category" placeholder="Cafe" /></label>
+        <label>Store Name
+          <input name="q" placeholder="Search by name, city, category" />
+        </label>
+        <label>State
+          <select id="state-filter" name="state">
+            <option value="">All States</option>
+          </select>
+        </label>
+        <label>City
+          <select id="city-filter" name="city">
+            <option value="">All Cities</option>
+          </select>
+        </label>
+        <label>Category
+          <select id="category-filter" name="category">
+            <option value="">All Categories</option>
+          </select>
+        </label>
         <label><input type="checkbox" name="openNow" /> Open now</label>
         <label><input type="checkbox" name="topRated" /> Top rated</label>
-        <button type="submit">Search</button>
+        <label><input type="checkbox" name="nearestFirst" /> Nearest first</label>
+        <input type="hidden" name="nearestLat" id="nearest-lat" />
+        <input type="hidden" name="nearestLng" id="nearest-lng" />
+        <div class="button-row">
+          <button type="submit">Search Stores</button>
+          <button type="button" id="detect-location-btn" class="secondary">Use My Location</button>
+          <button type="button" id="my-favorites-btn" class="secondary">My Favorites</button>
+        </div>
       </form>
-      <ul id="stores-list" class="list"></ul>
+      <p class="hint" id="results-summary">Run a search to load stores.</p>
+      <ul id="stores-list" class="list interactive-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Interactive Map</h2>
+      <div id="stores-map" class="map-box"></div>
+      <article id="store-detail" class="detail-card">
+        <h3>Store Details</h3>
+        <p class="hint">Select a store marker or list item to view full details.</p>
+      </article>
     </section>
   </main>
 
   <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
