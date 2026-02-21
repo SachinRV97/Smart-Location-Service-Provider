@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Store Discovery | Smart Location Service Provider</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero compact">
+    <h1>Store Discovery</h1>
+    <p>Search approved stores using filters.</p>
+  </header>
+
+  <nav class="top-nav">
+    <a class="nav-link" href="/index.html">Home</a>
+    <a class="nav-link" href="/auth.html">Authentication</a>
+    <a class="nav-link is-active" href="/stores.html">Store Discovery</a>
+    <a class="nav-link" href="/owner.html">Owner Portal</a>
+    <a class="nav-link" href="/admin.html">Admin Portal</a>
+  </nav>
+
+  <main class="layout single-column">
+    <section class="card">
+      <h2>Find approved stores</h2>
+      <form id="search-form" class="grid-form">
+        <label>Query <input name="q" placeholder="store or keyword" /></label>
+        <label>State <input name="state" placeholder="California" /></label>
+        <label>City <input name="city" placeholder="San Jose" /></label>
+        <label>Category <input name="category" placeholder="Cafe" /></label>
+        <label><input type="checkbox" name="openNow" /> Open now</label>
+        <label><input type="checkbox" name="topRated" /> Top rated</label>
+        <button type="submit">Search</button>
+      </form>
+      <ul id="stores-list" class="list"></ul>
+    </section>
+  </main>
+
+  <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="/app.js"></script>
+</body>
+</html>

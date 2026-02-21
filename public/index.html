@@ -9,87 +9,40 @@
 <body>
   <header class="hero">
     <h1>Smart Location Service Provider</h1>
-    <p>Discover, submit, and moderate stores with a guided flow for customer, owner, and admin roles.</p>
+    <p>Pick a flow below to continue with a cleaner multi-page experience.</p>
   </header>
 
-  <main class="layout">
+  <nav class="top-nav">
+    <a class="nav-link is-active" href="/index.html">Home</a>
+    <a class="nav-link" href="/auth.html">Authentication</a>
+    <a class="nav-link" href="/stores.html">Store Discovery</a>
+    <a class="nav-link" href="/owner.html">Owner Portal</a>
+    <a class="nav-link" href="/admin.html">Admin Portal</a>
+  </nav>
+
+  <main class="layout single-column">
     <section class="card">
-      <h2>1) Account flow</h2>
-      <div class="tabs">
-        <button class="tab is-active" data-panel="register-panel">Register</button>
-        <button class="tab" data-panel="login-panel">Login</button>
+      <h2>Choose your page</h2>
+      <p class="hint">The UI is now separated into dedicated pages instead of one long single screen.</p>
+      <div class="page-grid">
+        <a class="page-tile" href="/auth.html">
+          <h3>Authentication</h3>
+          <p>Register, login, and manage current session.</p>
+        </a>
+        <a class="page-tile" href="/stores.html">
+          <h3>Store Discovery</h3>
+          <p>Search approved stores by query, location, and category filters.</p>
+        </a>
+        <a class="page-tile" href="/owner.html">
+          <h3>Owner Portal</h3>
+          <p>Submit new stores for review and moderation.</p>
+        </a>
+        <a class="page-tile" href="/admin.html">
+          <h3>Admin Portal</h3>
+          <p>Load dashboard metrics and approve/reject pending stores.</p>
+        </a>
       </div>
-
-      <form id="register-panel" class="panel">
-        <label>Name <input name="name" required /></label>
-        <label>Email <input name="email" type="email" required /></label>
-        <label>Password <input name="password" type="password" minlength="6" required /></label>
-        <label>Phone <input name="phone" /></label>
-        <label>Role
-          <select name="role">
-            <option value="customer">Customer</option>
-            <option value="owner">Owner</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
-        <button type="submit">Create account</button>
-      </form>
-
-      <form id="login-panel" class="panel hidden">
-        <label>Email <input name="email" type="email" required /></label>
-        <label>Password <input name="password" type="password" required /></label>
-        <button type="submit">Sign in</button>
-      </form>
-
-      <div class="session-box">
-        <p><strong>Current user:</strong> <span id="user-display">None</span></p>
-        <button id="logout-btn" class="secondary">Logout</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>2) Find approved stores</h2>
-      <form id="search-form" class="grid-form">
-        <label>Query <input name="q" placeholder="store or keyword" /></label>
-        <label>State <input name="state" placeholder="California" /></label>
-        <label>City <input name="city" placeholder="San Jose" /></label>
-        <label>Category <input name="category" placeholder="Cafe" /></label>
-        <label><input type="checkbox" name="openNow" /> Open now</label>
-        <label><input type="checkbox" name="topRated" /> Top rated</label>
-        <button type="submit">Search</button>
-      </form>
-      <ul id="stores-list" class="list"></ul>
-    </section>
-
-    <section class="card">
-      <h2>3) Owner flow: submit store</h2>
-      <p class="hint">Requires <code>owner</code> or <code>admin</code> login.</p>
-      <form id="store-form" class="grid-form">
-        <label>Store name <input name="storeName" required /></label>
-        <label>Category <input name="category" required /></label>
-        <label>State <input name="state" required /></label>
-        <label>City <input name="city" required /></label>
-        <label>Address <input name="address" /></label>
-        <label>Opening (HH:MM) <input name="openingTime" placeholder="09:00" /></label>
-        <label>Closing (HH:MM) <input name="closingTime" placeholder="18:00" /></label>
-        <button type="submit">Submit for approval</button>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>4) Admin flow: moderation</h2>
-      <p class="hint">Requires <code>admin</code> login.</p>
-      <div class="admin-actions">
-        <button id="dashboard-btn">Load dashboard</button>
-        <button id="pending-btn" class="secondary">Load pending stores</button>
-      </div>
-      <pre id="dashboard-output" class="code-block">Dashboard data will appear here.</pre>
-      <ul id="pending-list" class="list"></ul>
     </section>
   </main>
-
-  <section id="toast" class="toast" aria-live="polite"></section>
-
-  <script src="/app.js"></script>
 </body>
 </html>

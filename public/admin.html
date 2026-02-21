@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Portal | Smart Location Service Provider</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero compact">
+    <h1>Admin Portal</h1>
+    <p>Moderate pending stores and monitor dashboard metrics.</p>
+  </header>
+
+  <nav class="top-nav">
+    <a class="nav-link" href="/index.html">Home</a>
+    <a class="nav-link" href="/auth.html">Authentication</a>
+    <a class="nav-link" href="/stores.html">Store Discovery</a>
+    <a class="nav-link" href="/owner.html">Owner Portal</a>
+    <a class="nav-link is-active" href="/admin.html">Admin Portal</a>
+  </nav>
+
+  <main class="layout single-column">
+    <section class="card">
+      <h2>Moderation</h2>
+      <p class="hint">Requires <code>admin</code> login.</p>
+      <div class="session-box">
+        <p><strong>Current user:</strong> <span id="user-display">None</span></p>
+      </div>
+      <div class="admin-actions">
+        <button id="dashboard-btn">Load dashboard</button>
+        <button id="pending-btn" class="secondary">Load pending stores</button>
+      </div>
+      <pre id="dashboard-output" class="code-block">Dashboard data will appear here.</pre>
+      <ul id="pending-list" class="list"></ul>
+    </section>
+  </main>
+
+  <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="/app.js"></script>
+</body>
+</html>
