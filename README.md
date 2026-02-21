@@ -9,7 +9,7 @@ A Node.js + Express + MongoDB backend plus a built-in web UI for discovering ver
 - Public store discovery endpoints with filters (`state`, `city`, `category`, text query, `openNow`, `topRated`, nearest)
 - Admin approval/rejection/blocking and dashboard metrics
 - MongoDB geospatial indexing (`2dsphere`) for nearest-store queries
-- Browser UI at `/` with guided authentication, discovery, owner submission, and admin moderation flows
+- Browser UI split into dedicated pages: `/auth.html`, `/stores.html`, `/owner.html`, and `/admin.html` (home at `/`)
 
 ## Quick start
 
