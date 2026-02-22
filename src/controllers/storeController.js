@@ -218,6 +218,12 @@ async function registerStore(req, res) {
 }
 
 async function searchStores(req, res) {
+  if (req.user?.role === 'admin') {
+    return res.status(403).json({
+      message: 'Admin accounts cannot access store discovery while logged in. Please logout first.'
+    });
+  }
+
   const {
     state,
     city,
@@ -319,12 +325,17 @@ async function searchStores(req, res) {
 }
 
 async function listMyStores(req, res) {
-  const query = req.user.role === 'admin' ? {} : { owner: req.user.id };
-  const stores = await Store.find(query).sort({ createdAt: -1 });
+  const stores = await Store.find({ owner: req.user.id }).sort({ createdAt: -1 });
   return res.json(stores);
 }
 
 async function getStoreById(req, res) {
+  if (req.user?.role === 'admin') {
+    return res.status(403).json({
+      message: 'Admin accounts cannot access store discovery while logged in. Please logout first.'
+    });
+  }
+
   const baseQuery = { _id: req.params.id };
 
   if (!req.user || req.user.role === 'customer') {
@@ -374,3 +385,4 @@ module.exports = {
   listMyStores,
   getStoreById
 };
+

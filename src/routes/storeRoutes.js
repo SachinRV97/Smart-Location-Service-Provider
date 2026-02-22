@@ -10,8 +10,9 @@ const { authenticate, optionalAuthenticate, authorize } = require('../middleware
 const router = express.Router();
 
 router.get('/', optionalAuthenticate, searchStores);
-router.get('/mine', authenticate, authorize('owner', 'admin'), listMyStores);
+router.get('/mine', authenticate, authorize('owner'), listMyStores);
 router.get('/:id', optionalAuthenticate, getStoreById);
-router.post('/', authenticate, authorize('owner', 'admin'), registerStore);
+router.post('/', authenticate, authorize('owner'), registerStore);
 
 module.exports = router;
+

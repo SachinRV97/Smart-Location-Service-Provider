@@ -21,7 +21,7 @@ const ROLE_HOME_PATHS = {
 };
 
 const PROTECTED_PAGE_RULES = {
-  '/owner.html': ['owner', 'admin'],
+  '/owner.html': ['owner'],
   '/admin.html': ['admin'],
   '/admin-dashboard.html': ['admin'],
   '/admin-stores.html': ['admin'],
@@ -29,6 +29,8 @@ const PROTECTED_PAGE_RULES = {
   '/admin-reviews.html': ['admin'],
   '/admin-metadata.html': ['admin']
 };
+
+const ADMIN_RESTRICTED_PATHS = new Set(['/stores.html', '/owner.html']);
 
 const DEFAULT_MARKER_STYLE = {
   radius: 8,
@@ -78,6 +80,7 @@ function renderUser() {
     el.textContent = text;
   });
   renderStoreAuthActions();
+  renderRoleAwareNavigation();
 }
 
 function renderStoreAuthActions() {
@@ -95,6 +98,16 @@ function renderStoreAuthActions() {
   if (logoutBtn) logoutBtn.hidden = !isLoggedIn;
 }
 
+function renderRoleAwareNavigation() {
+  const isAdmin = normalizeRole(state.user?.role) === 'admin';
+  document.querySelectorAll('a.nav-link').forEach((link) => {
+    const href = String(link.getAttribute('href') || '').toLowerCase();
+    if (ADMIN_RESTRICTED_PATHS.has(href)) {
+      link.hidden = isAdmin;
+    }
+  });
+}
+
 function normalizeRole(value) {
   const role = String(value || '').trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(ROLE_HOME_PATHS, role) ? role : '';
@@ -105,11 +118,18 @@ function getRoleHomePath(role) {
 }
 
 function canRoleAccessPath(pathname, role) {
-  const requiredRoles = PROTECTED_PAGE_RULES[String(pathname || '').toLowerCase()];
+  const normalizedPath = String(pathname || '').toLowerCase();
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === 'admin' && ADMIN_RESTRICTED_PATHS.has(normalizedPath)) {
+    return false;
+  }
+
+  const requiredRoles = PROTECTED_PAGE_RULES[normalizedPath];
   if (!requiredRoles) {
     return true;
   }
-  return requiredRoles.includes(normalizeRole(role));
+  return requiredRoles.includes(normalizedRole);
 }
 
 function getSafeNextPath(role) {
@@ -142,6 +162,19 @@ function redirectAfterAuthSuccess() {
   }
   const nextPath = getSafeNextPath(role);
   redirectTo(nextPath || getRoleHomePath(role));
+}
+
+function enforceAdminRestrictedPage(pathname = window.location.pathname) {
+  const normalizedPath = String(pathname || '').toLowerCase();
+  const normalizedRole = normalizeRole(state.user?.role);
+
+  if (normalizedRole !== 'admin' || !ADMIN_RESTRICTED_PATHS.has(normalizedPath)) {
+    return true;
+  }
+
+  showToast('Admin must logout to access this page.', 'error');
+  setTimeout(() => redirectTo(getRoleHomePath(normalizedRole)), 450);
+  return false;
 }
 
 function enforcePageRoleAccess(allowedRoles, pagePath) {
@@ -598,7 +631,6 @@ function renderStoreDetail(store) {
       <div><strong>Description:</strong> ${escapeHtml(store.description || 'N/A')}</div>
     </div>
     <div class="button-row" style="margin-top:0.8rem">
-      <a href="tel:${escapeHtml(store.phone || '')}"><button type="button">Call Now</button></a>
       <a href="${getDirectionsUrl(
         store
       )}" target="_blank" rel="noreferrer"><button type="button" class="secondary">Get Direction</button></a>
@@ -695,6 +727,7 @@ async function detectCurrentLocation({ latInput, lngInput, onSuccess }) {
 function initializeStorePage() {
   const searchForm = document.getElementById('search-form');
   if (!searchForm) return;
+  if (!enforceAdminRestrictedPage('/stores.html')) return;
 
   initializeStoreMap();
 
@@ -930,7 +963,8 @@ function prefillOwnerForm(storeForm) {
 function initializeOwnerPage() {
   const storeForm = document.getElementById('store-form');
   if (!storeForm) return;
-  if (!enforcePageRoleAccess(['owner', 'admin'], '/owner.html')) return;
+  if (!enforceAdminRestrictedPage('/owner.html')) return;
+  if (!enforcePageRoleAccess(['owner'], '/owner.html')) return;
 
   const stateSelect = document.getElementById('owner-state');
   const citySelect = document.getElementById('owner-city');
@@ -1759,3 +1793,4 @@ initializeAuthPage();
 initializeStorePage();
 initializeOwnerPage();
 initializeAdminPage();
+
