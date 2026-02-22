@@ -15,6 +15,7 @@ const {
   listStores,
   listUsers,
   moderateReview,
+  resetOwnerPassword,
   rejectStore,
   updateCategory,
   updateLocation,
@@ -37,6 +38,7 @@ router.patch('/stores/:id/unblock', unblockStore);
 router.get('/users', listUsers);
 router.patch('/users/:id/block', blockUser);
 router.patch('/users/:id/unblock', unblockUser);
+router.patch('/users/:id/reset-password', resetOwnerPassword);
 
 router.get('/reviews/pending', listPendingReviews);
 router.patch('/reviews/:id/moderate', moderateReview);

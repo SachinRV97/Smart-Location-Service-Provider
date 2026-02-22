@@ -31,6 +31,7 @@ const PROTECTED_PAGE_RULES = {
 };
 
 const ADMIN_RESTRICTED_PATHS = new Set(['/stores.html', '/owner.html']);
+const AUTH_LOGIN_PATH = '/auth.html?mode=login';
 
 const DEFAULT_MARKER_STYLE = {
   radius: 8,
@@ -79,23 +80,66 @@ function renderUser() {
   userDisplays.forEach((el) => {
     el.textContent = text;
   });
-  renderStoreAuthActions();
+  document.querySelectorAll('[data-header-user-display]').forEach((el) => {
+    el.textContent = text;
+  });
+  renderHeaderAuthActions();
   renderRoleAwareNavigation();
 }
 
-function renderStoreAuthActions() {
-  const loginBtn = document.getElementById('stores-login-btn');
-  const registerBtn = document.getElementById('stores-register-btn');
-  const logoutBtn = document.getElementById('stores-logout-btn');
-
-  if (!loginBtn && !registerBtn && !logoutBtn) {
+function ensureHeaderAuthActions() {
+  const topNav = document.querySelector('.top-nav');
+  if (!topNav || topNav.querySelector('[data-header-auth-actions]')) {
     return;
   }
 
+  const actions = document.createElement('div');
+  actions.className = 'header-auth-actions';
+  actions.setAttribute('data-header-auth-actions', 'true');
+  actions.innerHTML = `
+    <div class="button-row header-auth-buttons">
+      <button type="button" class="secondary small" data-header-auth-action="login">Login</button>
+      <button type="button" class="secondary small" data-header-auth-action="logout">Logout</button>
+    </div>
+    <p class="header-user-line"><strong>Current user:</strong> <span data-header-user-display>None</span></p>
+  `;
+
+  topNav.appendChild(actions);
+}
+
+function renderHeaderAuthActions() {
   const isLoggedIn = Boolean(state.user);
-  if (loginBtn) loginBtn.hidden = isLoggedIn;
-  if (registerBtn) registerBtn.hidden = isLoggedIn;
-  if (logoutBtn) logoutBtn.hidden = !isLoggedIn;
+  document.querySelectorAll('[data-header-auth-action="login"]').forEach((button) => {
+    button.hidden = isLoggedIn;
+  });
+  document.querySelectorAll('[data-header-auth-action="logout"]').forEach((button) => {
+    button.hidden = !isLoggedIn;
+  });
+}
+
+function logoutAndRedirectToLogin() {
+  setSession('', null);
+  showToast('Logged out. Redirecting to Authentication page.');
+  loadMyNotifications();
+  setTimeout(() => {
+    redirectTo(AUTH_LOGIN_PATH);
+  }, 320);
+}
+
+function initializeHeaderAuthActions() {
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-header-auth-action]');
+    if (!button) return;
+
+    const action = String(button.dataset.headerAuthAction || '');
+    if (action === 'login') {
+      redirectTo(AUTH_LOGIN_PATH);
+      return;
+    }
+    if (action === 'logout') {
+      logoutAndRedirectToLogin();
+    }
+  });
 }
 
 function renderRoleAwareNavigation() {
@@ -436,15 +480,6 @@ function initializeAuthPage() {
     });
   }
 
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-      setSession('', null);
-      showToast('Logged out.');
-      loadMyNotifications();
-    });
-  }
-
   const refreshNotificationsBtn = document.getElementById('refresh-notifications-btn');
   refreshNotificationsBtn?.addEventListener('click', () => {
     loadMyNotifications();
@@ -738,28 +773,10 @@ function initializeStorePage() {
   const nearestLngInput = document.getElementById('nearest-lng');
   const detectBtn = document.getElementById('detect-location-btn');
   const favoritesBtn = document.getElementById('my-favorites-btn');
-  const loginBtn = document.getElementById('stores-login-btn');
-  const registerBtn = document.getElementById('stores-register-btn');
-  const storeLogoutBtn = document.getElementById('stores-logout-btn');
   const storesList = document.getElementById('stores-list');
   const detailEl = document.getElementById('store-detail');
   const queryInput = searchForm.querySelector('input[name="q"]');
   const filterCheckboxes = [...searchForm.querySelectorAll('input[type="checkbox"]')];
-
-  renderStoreAuthActions();
-
-  loginBtn?.addEventListener('click', () => {
-    redirectTo('/auth.html?mode=login');
-  });
-
-  registerBtn?.addEventListener('click', () => {
-    redirectTo('/auth.html?mode=register');
-  });
-
-  storeLogoutBtn?.addEventListener('click', () => {
-    setSession('', null);
-    showToast('Logged out.');
-  });
 
   loadMetaFilters({ stateSelect, citySelect, categorySelect }).catch((error) => {
     showToast(error.message, 'error');
@@ -1263,11 +1280,20 @@ async function loadUsers() {
               <div>${escapeHtml(user.email)}</div>
               <div class="row">
                 <small>Blocked: ${user.isBlocked ? 'Yes' : 'No'}</small>
-                <button class="small ${
-                  user.isBlocked ? '' : 'secondary'
-                }" data-user-id="${escapeHtml(user._id)}" data-user-action="${
-                  user.isBlocked ? 'unblock' : 'block'
-                }">${user.isBlocked ? 'Unblock' : 'Block'}</button>
+                <div class="button-row">
+                  ${
+                    user.role === 'owner'
+                      ? `<button class="small secondary" data-user-id="${escapeHtml(
+                          user._id
+                        )}" data-user-action="reset-password">Reset Password</button>`
+                      : ''
+                  }
+                  <button class="small ${
+                    user.isBlocked ? '' : 'secondary'
+                  }" data-user-id="${escapeHtml(user._id)}" data-user-action="${
+                    user.isBlocked ? 'unblock' : 'block'
+                  }">${user.isBlocked ? 'Unblock' : 'Block'}</button>
+                </div>
               </div>
             </li>`
         )
@@ -1594,11 +1620,29 @@ function initializeAdminPage() {
   usersList?.addEventListener('click', async (event) => {
     const btn = event.target.closest('button[data-user-id]');
     if (!btn) return;
+
+    const userId = btn.dataset.userId;
+    const userAction = btn.dataset.userAction;
+    if (!userId || !userAction) return;
+
     try {
-      await api(`/api/admin/users/${btn.dataset.userId}/${btn.dataset.userAction}`, {
-        method: 'PATCH'
-      });
-      showToast(`User ${btn.dataset.userAction}ed.`);
+      if (userAction === 'reset-password') {
+        const isConfirmed = window.confirm('Reset password for this owner?');
+        if (!isConfirmed) return;
+
+        const payload = await api(`/api/admin/users/${userId}/reset-password`, {
+          method: 'PATCH'
+        });
+        showToast('Owner password reset.');
+        if (payload?.temporaryPassword) {
+          window.prompt('Temporary password (copy now):', payload.temporaryPassword);
+        }
+      } else {
+        await api(`/api/admin/users/${userId}/${userAction}`, {
+          method: 'PATCH'
+        });
+        showToast(`User ${userAction}ed.`);
+      }
       await loadUsers();
     } catch (error) {
       showToast(error.message, 'error');
@@ -1788,6 +1832,8 @@ function initializeAdminPage() {
 }
 
 initializeTabs();
+ensureHeaderAuthActions();
+initializeHeaderAuthActions();
 renderUser();
 initializeAuthPage();
 initializeStorePage();

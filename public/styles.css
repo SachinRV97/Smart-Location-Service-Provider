@@ -46,6 +46,19 @@ h4 {
   color: #f4f9ff;
   padding: 2.1rem 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -110px -110px auto;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.24), transparent 68%);
+  pointer-events: none;
 }
 
 .hero.compact {
@@ -64,31 +77,72 @@ h4 {
 
 .top-nav {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.8rem 1rem;
+  align-items: flex-start;
+  gap: 0.56rem;
+  padding: 0.72rem 0.9rem;
   flex-wrap: wrap;
   max-width: 1160px;
-  margin: 0 auto;
+  margin: 0.72rem auto 0.95rem;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(165, 184, 206, 0.66);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(20, 42, 64, 0.1);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0.6rem;
+  z-index: 40;
 }
 
 .nav-link {
   text-decoration: none;
-  color: #143352;
-  background: #dce9f9;
-  border-radius: 999px;
-  padding: 0.42rem 0.82rem;
+  color: #203751;
+  background: #edf4fc;
+  border: 1px solid #d4e2f3;
+  border-radius: 10px;
+  padding: 0.46rem 0.84rem;
   font-weight: 700;
-  font-size: 0.9rem;
-  transition: all 0.18s ease;
+  font-size: 0.88rem;
+  transition: all 0.16s ease;
 }
 
 .nav-link:hover {
-  background: #cde0f8;
+  background: #e2eefb;
+  transform: translateY(-1px);
 }
 
 .nav-link.is-active {
-  background: var(--primary);
+  background: linear-gradient(145deg, #0f78d4, #0a63b1);
+  border-color: #0a63b1;
   color: white;
+  box-shadow: 0 5px 14px rgba(10, 99, 177, 0.28);
+}
+
+.header-auth-actions {
+  margin-left: auto;
+  background: rgba(247, 251, 255, 0.92);
+  border: 1px solid #d4e2f3;
+  border-radius: 12px;
+  padding: 0.44rem 0.58rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  min-width: 220px;
+}
+
+.header-auth-buttons {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.header-auth-actions button {
+  min-width: 78px;
+}
+
+.header-user-line {
+  margin: 0;
+  color: #3f5671;
+  font-size: 0.78rem;
 }
 
 .layout {
@@ -482,5 +536,24 @@ button.small {
 
   .hero h1 {
     font-size: 1.5rem;
+  }
+
+  .top-nav {
+    margin-top: 0;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+    top: 0;
+  }
+
+  .header-auth-actions {
+    margin-left: 0;
+    align-items: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .header-auth-buttons {
+    justify-content: flex-start;
   }
 }

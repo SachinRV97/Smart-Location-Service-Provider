@@ -1,3 +1,5 @@
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const Category = require('../models/Category');
 const Location = require('../models/Location');
 const Review = require('../models/Review');
@@ -9,6 +11,11 @@ const { refreshStoreRating } = require('../services/storeRating');
 
 function normalizeText(value) {
   return String(value || '').trim();
+}
+
+function createTemporaryOwnerPassword() {
+  const randomPart = crypto.randomBytes(8).toString('hex').slice(0, 8);
+  return `Owner@${randomPart}`;
 }
 
 function buildLastSixMonths() {
@@ -177,6 +184,44 @@ async function unblockUser(req, res) {
     return res.status(404).json({ message: 'User not found' });
   }
   return res.json(user);
+}
+
+async function resetOwnerPassword(req, res) {
+  const user = await User.findById(req.params.id).select('name email role isBlocked passwordHash');
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  if (user.role !== 'owner') {
+    return res.status(400).json({ message: 'Password reset is allowed only for owner accounts' });
+  }
+
+  const temporaryPassword = createTemporaryOwnerPassword();
+  user.passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  await user.save();
+
+  await notifyUser({
+    userId: user._id,
+    email: user.email,
+    type: 'system',
+    title: 'Password reset by admin',
+    message: 'Your account password was reset by admin. Contact admin for your temporary password.',
+    metadata: {
+      reason: 'admin_password_reset'
+    },
+    sendEmail: true
+  }).catch(() => {});
+
+  return res.json({
+    message: 'Owner password reset successfully',
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    },
+    temporaryPassword
+  });
 }
 
 async function listPendingReviews(req, res) {
@@ -499,6 +544,7 @@ module.exports = {
   listUsers,
   blockUser,
   unblockUser,
+  resetOwnerPassword,
   listPendingReviews,
   moderateReview,
   listCategories,
