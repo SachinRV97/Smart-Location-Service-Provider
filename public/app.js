@@ -441,7 +441,6 @@ function initializeAuthPage() {
         setSession(data.token, data.user);
         form.reset();
         showToast('Registration successful. Redirecting...');
-        loadMyNotifications();
         setTimeout(() => redirectAfterAuthSuccess(), 450);
       } catch (error) {
         showToast(error.message, 'error');
@@ -472,7 +471,6 @@ function initializeAuthPage() {
         setSession(data.token, data.user);
         form.reset();
         showToast('Logged in successfully. Redirecting...');
-        loadMyNotifications();
         setTimeout(() => redirectAfterAuthSuccess(), 450);
       } catch (error) {
         showToast(error.message, 'error');
@@ -480,41 +478,43 @@ function initializeAuthPage() {
     });
   }
 
-  const refreshNotificationsBtn = document.getElementById('refresh-notifications-btn');
-  refreshNotificationsBtn?.addEventListener('click', () => {
-    loadMyNotifications();
-  });
-
-  const markAllReadBtn = document.getElementById('mark-all-read-btn');
-  markAllReadBtn?.addEventListener('click', async () => {
-    if (!state.user) {
-      showToast('Login first.', 'error');
-      return;
-    }
-    try {
-      await api('/api/notifications/read-all', { method: 'PATCH' });
-      showToast('All notifications marked as read.');
-      loadMyNotifications();
-    } catch (error) {
-      showToast(error.message, 'error');
-    }
-  });
-
   const notificationList = document.getElementById('notification-list');
-  notificationList?.addEventListener('click', async (event) => {
-    const button = event.target.closest('button[data-notification-id]');
-    if (!button) return;
-    try {
-      await api(`/api/notifications/${button.dataset.notificationId}/read`, {
-        method: 'PATCH'
-      });
+  if (notificationList) {
+    const refreshNotificationsBtn = document.getElementById('refresh-notifications-btn');
+    refreshNotificationsBtn?.addEventListener('click', () => {
       loadMyNotifications();
-    } catch (error) {
-      showToast(error.message, 'error');
-    }
-  });
+    });
 
-  loadMyNotifications();
+    const markAllReadBtn = document.getElementById('mark-all-read-btn');
+    markAllReadBtn?.addEventListener('click', async () => {
+      if (!state.user) {
+        showToast('Login first.', 'error');
+        return;
+      }
+      try {
+        await api('/api/notifications/read-all', { method: 'PATCH' });
+        showToast('All notifications marked as read.');
+        loadMyNotifications();
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
+
+    notificationList.addEventListener('click', async (event) => {
+      const button = event.target.closest('button[data-notification-id]');
+      if (!button) return;
+      try {
+        await api(`/api/notifications/${button.dataset.notificationId}/read`, {
+          method: 'PATCH'
+        });
+        loadMyNotifications();
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
+
+    loadMyNotifications();
+  }
 }
 
 function initializeStoreMap() {
@@ -1839,4 +1839,3 @@ initializeAuthPage();
 initializeStorePage();
 initializeOwnerPage();
 initializeAdminPage();
-
