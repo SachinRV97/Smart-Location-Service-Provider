@@ -4,15 +4,31 @@ const Location = require('../models/Location');
 const Review = require('../models/Review');
 const SearchLog = require('../models/SearchLog');
 const Store = require('../models/Store');
+const User = require('../models/User');
+const { notifyUser } = require('../services/notificationService');
+
+const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeBoolean(value) {
   return value === true || value === 'true';
+}
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function buildGeoPoint(payload) {
   const latitude = Number(payload.latitude ?? payload.lat);
   const longitude = Number(payload.longitude ?? payload.lng);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
     return null;
   }
   return {
@@ -34,51 +50,162 @@ function parseImages(payload) {
   return [];
 }
 
+function toMinutesExpression(fieldPath) {
+  return {
+    $add: [
+      {
+        $multiply: [
+          { $toInt: { $substrBytes: [fieldPath, 0, 2] } },
+          60
+        ]
+      },
+      { $toInt: { $substrBytes: [fieldPath, 3, 2] } }
+    ]
+  };
+}
+
+function buildOpenNowExpression(currentMinutes) {
+  const opening = toMinutesExpression('$openingTime');
+  const closing = toMinutesExpression('$closingTime');
+
+  return {
+    $let: {
+      vars: {
+        openingMinutes: opening,
+        closingMinutes: closing
+      },
+      in: {
+        $cond: [
+          { $lte: ['$$openingMinutes', '$$closingMinutes'] },
+          {
+            $and: [
+              { $lte: ['$$openingMinutes', currentMinutes] },
+              { $gte: ['$$closingMinutes', currentMinutes] }
+            ]
+          },
+          {
+            $or: [
+              { $lte: ['$$openingMinutes', currentMinutes] },
+              { $gte: ['$$closingMinutes', currentMinutes] }
+            ]
+          }
+        ]
+      }
+    }
+  };
+}
+
+function parseLimit(value, fallback = 20) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.trunc(numeric), 1), 100);
+}
+
+async function notifyAdminsAboutNewStore(store) {
+  const admins = await User.find({ role: 'admin', isBlocked: false }).select('_id email');
+  if (!admins.length) {
+    return;
+  }
+
+  await Promise.all(
+    admins.map((admin) =>
+      notifyUser({
+        userId: admin._id,
+        email: admin.email,
+        type: 'store_submitted',
+        title: 'New store registration pending approval',
+        message: `${store.storeName} (${store.city}, ${store.state}) was submitted and is waiting for approval.`,
+        metadata: {
+          storeId: String(store._id)
+        },
+        sendEmail: true
+      })
+    )
+  ).catch(() => {});
+}
+
 async function registerStore(req, res) {
   const payload = req.body || {};
-  const requiredFields = ['storeName', 'city', 'state', 'category', 'fullAddress', 'phone'];
-  const missingFields = requiredFields.filter((field) => !payload[field]);
+  const requiredFields = [
+    'storeName',
+    'ownerName',
+    'email',
+    'phone',
+    'state',
+    'city',
+    'fullAddress',
+    'category',
+    'openingTime',
+    'closingTime',
+    'latitude',
+    'longitude'
+  ];
 
+  const missingFields = requiredFields.filter((field) => !normalizeText(payload[field]));
   if (missingFields.length) {
     return res.status(400).json({
       message: `Missing required fields: ${missingFields.join(', ')}`
     });
   }
 
+  const ownerName = normalizeText(payload.ownerName || req.user.name);
+  const email = normalizeText(payload.email || req.user.email).toLowerCase();
+  const phone = normalizeText(payload.phone);
+  const openingTime = normalizeText(payload.openingTime);
+  const closingTime = normalizeText(payload.closingTime);
+
+  if (!EMAIL_REGEX.test(email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+  if (!TIME_24H_REGEX.test(openingTime) || !TIME_24H_REGEX.test(closingTime)) {
+    return res
+      .status(400)
+      .json({ message: 'openingTime and closingTime must use HH:MM 24-hour format' });
+  }
+  if (phone.length < 7) {
+    return res.status(400).json({ message: 'Invalid phone number' });
+  }
+
   const location = buildGeoPoint(payload);
-  const ownerName = payload.ownerName || req.user.name;
-  const email = (payload.email || req.user.email || '').toLowerCase();
+  if (!location) {
+    return res.status(400).json({
+      message: 'Valid latitude and longitude are required'
+    });
+  }
 
   const store = await Store.create({
-    storeName: payload.storeName,
+    storeName: normalizeText(payload.storeName),
     owner: req.user.id,
     ownerName,
     email,
-    phone: payload.phone,
-    state: payload.state,
-    city: payload.city,
-    fullAddress: payload.fullAddress,
+    phone,
+    state: normalizeText(payload.state),
+    city: normalizeText(payload.city),
+    fullAddress: normalizeText(payload.fullAddress),
     location,
-    category: payload.category,
-    openingTime: payload.openingTime,
-    closingTime: payload.closingTime,
-    description: payload.description,
+    category: normalizeText(payload.category),
+    openingTime,
+    closingTime,
+    description: normalizeText(payload.description),
     images: parseImages(payload),
-    gst: payload.gst,
+    gst: normalizeText(payload.gst),
     status: 'Pending'
   });
 
   await Promise.all([
     Category.updateOne(
       { name: store.category },
-      { $setOnInsert: { name: store.category } },
+      { $setOnInsert: { name: store.category, isActive: true } },
       { upsert: true }
     ),
     Location.updateOne(
       { state: store.state, city: store.city },
-      { $setOnInsert: { state: store.state, city: store.city } },
+      { $setOnInsert: { state: store.state, city: store.city, isActive: true } },
       { upsert: true }
-    )
+    ),
+    notifyAdminsAboutNewStore(store)
   ]);
 
   return res.status(201).json(store);
@@ -95,35 +222,40 @@ async function searchStores(req, res) {
     nearestLat,
     nearestLng,
     nearestFirst,
-    limit = 20
+    limit
   } = req.query;
 
-  const safeLimit = Math.min(Number(limit) || 20, 100);
+  const safeLimit = parseLimit(limit, 20);
   const query = { status: 'Approved', isBlocked: false };
 
-  if (state) query.state = state;
-  if (city) query.city = city;
-  if (category) query.category = category;
-  if (q) {
+  if (normalizeText(state)) query.state = normalizeText(state);
+  if (normalizeText(city)) query.city = normalizeText(city);
+  if (normalizeText(category)) query.category = normalizeText(category);
+
+  if (normalizeText(q)) {
+    const escapedQuery = escapeRegex(normalizeText(q));
     query.$or = [
-      { storeName: { $regex: q, $options: 'i' } },
-      { city: { $regex: q, $options: 'i' } },
-      { state: { $regex: q, $options: 'i' } },
-      { category: { $regex: q, $options: 'i' } }
+      { storeName: { $regex: escapedQuery, $options: 'i' } },
+      { ownerName: { $regex: escapedQuery, $options: 'i' } },
+      { city: { $regex: escapedQuery, $options: 'i' } },
+      { state: { $regex: escapedQuery, $options: 'i' } },
+      { category: { $regex: escapedQuery, $options: 'i' } }
     ];
   }
 
   if (normalizeBoolean(openNow)) {
     const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    query.openingTime = { $lte: hhmm };
-    query.closingTime = { $gte: hhmm };
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    query.openingTime = { $regex: TIME_24H_REGEX };
+    query.closingTime = { $regex: TIME_24H_REGEX };
+    query.$expr = buildOpenNowExpression(currentMinutes);
   }
 
   const parsedLat = Number(nearestLat);
   const parsedLng = Number(nearestLng);
   const hasNearest = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
   const shouldSortTopRated = normalizeBoolean(topRated);
+  const shouldSortNearest = normalizeBoolean(nearestFirst) || hasNearest;
 
   let stores;
   if (hasNearest) {
@@ -149,8 +281,8 @@ async function searchStores(req, res) {
           distanceMeters: 1
         }
       });
-    } else if (normalizeBoolean(nearestFirst) || hasNearest) {
-      pipeline.push({ $sort: { distanceMeters: 1 } });
+    } else if (shouldSortNearest) {
+      pipeline.push({ $sort: { distanceMeters: 1, ratingAverage: -1 } });
     } else {
       pipeline.push({ $sort: { createdAt: -1 } });
     }
@@ -160,7 +292,9 @@ async function searchStores(req, res) {
   } else {
     let storeQuery = Store.find(query).limit(safeLimit);
     if (shouldSortTopRated) {
-      storeQuery = storeQuery.sort({ ratingAverage: -1, ratingCount: -1 });
+      storeQuery = storeQuery.sort({ ratingAverage: -1, ratingCount: -1, createdAt: -1 });
+    } else if (shouldSortNearest) {
+      storeQuery = storeQuery.sort({ ratingAverage: -1, ratingCount: -1, createdAt: -1 });
     } else {
       storeQuery = storeQuery.sort({ createdAt: -1 });
     }
@@ -169,10 +303,10 @@ async function searchStores(req, res) {
 
   SearchLog.create({
     customer: req.user?.id || undefined,
-    query: q,
-    state,
-    city,
-    category
+    query: normalizeText(q),
+    state: normalizeText(state),
+    city: normalizeText(city),
+    category: normalizeText(category)
   }).catch(() => {});
 
   return res.json(stores);
