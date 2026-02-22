@@ -9,7 +9,7 @@
 <body>
   <header class="hero compact">
     <h1>Admin Portal</h1>
-    <p>Manage approvals, users, reviews, categories, and locations with analytics.</p>
+    <p>Moderate stores and reviews, manage users and metadata, and monitor analytics.</p>
   </header>
 
   <nav class="top-nav">
@@ -22,23 +22,61 @@
 
   <main class="layout single-column">
     <section class="card">
-      <h2>Admin tools</h2>
+      <h2>Admin Controls</h2>
       <p class="hint">Requires <code>admin</code> login.</p>
       <div class="session-box">
         <p><strong>Current user:</strong> <span id="user-display">None</span></p>
       </div>
       <div class="button-row">
-        <button id="dashboard-btn">Load Dashboard</button>
+        <button id="dashboard-btn">Refresh Dashboard</button>
         <button id="pending-btn" class="secondary">Pending Stores</button>
+        <button id="all-stores-btn" class="secondary">All Stores</button>
         <button id="users-btn" class="secondary">Users</button>
         <button id="pending-reviews-btn" class="secondary">Pending Reviews</button>
       </div>
-      <pre id="dashboard-output" class="code-block">Dashboard data will appear here.</pre>
+      <pre id="dashboard-output" class="code-block">Dashboard JSON snapshot appears here.</pre>
+    </section>
+
+    <section class="card">
+      <h3>Analytics</h3>
+      <div class="metrics-grid">
+        <article class="metric-tile"><h4>Total Stores</h4><p id="metric-total-stores">--</p></article>
+        <article class="metric-tile"><h4>Active Stores</h4><p id="metric-active-stores">--</p></article>
+        <article class="metric-tile"><h4>Pending Stores</h4><p id="metric-pending-stores">--</p></article>
+        <article class="metric-tile"><h4>Total Customers</h4><p id="metric-total-customers">--</p></article>
+        <article class="metric-tile"><h4>Total Owners</h4><p id="metric-total-owners">--</p></article>
+        <article class="metric-tile"><h4>Total Searches</h4><p id="metric-search-count">--</p></article>
+        <article class="metric-tile"><h4>Approved Reviews</h4><p id="metric-approved-reviews">--</p></article>
+        <article class="metric-tile"><h4>Pending Reviews</h4><p id="metric-pending-reviews">--</p></article>
+        <article class="metric-tile"><h4>Blocked Stores</h4><p id="metric-blocked-stores">--</p></article>
+      </div>
+
+      <div class="highlight-grid">
+        <article class="highlight-card">
+          <h4>Most Searched City</h4>
+          <p id="highlight-most-searched-city">--</p>
+        </article>
+        <article class="highlight-card">
+          <h4>Most Viewed Store</h4>
+          <p id="highlight-most-viewed-store">--</p>
+        </article>
+      </div>
+
+      <h4>Monthly Growth (Stores vs Customers)</h4>
+      <canvas id="growth-chart" width="900" height="280"></canvas>
+
+      <h4>Top Categories</h4>
+      <ul id="top-categories-list" class="top-categories-list"></ul>
     </section>
 
     <section class="card">
       <h3>Pending Stores</h3>
       <ul id="pending-list" class="list"></ul>
+    </section>
+
+    <section class="card">
+      <h3>All Stores</h3>
+      <ul id="all-stores-list" class="list"></ul>
     </section>
 
     <section class="card">

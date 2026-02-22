@@ -4,7 +4,12 @@ const Review = require('../models/Review');
 const SearchLog = require('../models/SearchLog');
 const Store = require('../models/Store');
 const User = require('../models/User');
+const { notifyUser } = require('../services/notificationService');
 const { refreshStoreRating } = require('../services/storeRating');
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
 
 function buildLastSixMonths() {
   const months = [];
@@ -17,25 +22,69 @@ function buildLastSixMonths() {
   return months;
 }
 
+async function notifyStoreOwner(store, details) {
+  if (!store?.owner?._id) {
+    return;
+  }
+
+  await notifyUser({
+    userId: store.owner._id,
+    email: store.owner.email,
+    type: details.type,
+    title: details.title,
+    message: details.message,
+    metadata: {
+      storeId: String(store._id)
+    },
+    sendEmail: true
+  }).catch(() => {});
+}
+
 async function listPendingStores(req, res) {
-  const stores = await Store.find({ status: 'Pending' }).sort({ createdAt: 1 });
+  const stores = await Store.find({ status: 'Pending' })
+    .populate('owner', 'name email')
+    .sort({ createdAt: 1 });
   return res.json(stores);
 }
 
 async function listStores(req, res) {
-  const stores = await Store.find().sort({ createdAt: -1 }).limit(200);
+  const query = {};
+  if (normalizeText(req.query.status)) {
+    query.status = normalizeText(req.query.status);
+  }
+  if (req.query.isBlocked === 'true') {
+    query.isBlocked = true;
+  } else if (req.query.isBlocked === 'false') {
+    query.isBlocked = false;
+  }
+
+  const stores = await Store.find(query)
+    .populate('owner', 'name email')
+    .sort({ createdAt: -1 })
+    .limit(300);
   return res.json(stores);
 }
 
 async function approveStore(req, res) {
   const store = await Store.findByIdAndUpdate(
     req.params.id,
-    { status: 'Approved' },
+    {
+      status: 'Approved',
+      isBlocked: false
+    },
     { new: true }
-  );
+  ).populate('owner', 'name email');
+
   if (!store) {
     return res.status(404).json({ message: 'Store not found' });
   }
+
+  await notifyStoreOwner(store, {
+    type: 'store_approved',
+    title: 'Store approved',
+    message: `${store.storeName} has been approved and is now visible to customers.`
+  });
+
   return res.json(store);
 }
 
@@ -44,10 +93,18 @@ async function rejectStore(req, res) {
     req.params.id,
     { status: 'Rejected' },
     { new: true }
-  );
+  ).populate('owner', 'name email');
+
   if (!store) {
     return res.status(404).json({ message: 'Store not found' });
   }
+
+  await notifyStoreOwner(store, {
+    type: 'store_rejected',
+    title: 'Store rejected',
+    message: `${store.storeName} was rejected by admin. Please review details and resubmit if needed.`
+  });
+
   return res.json(store);
 }
 
@@ -56,10 +113,18 @@ async function blockStore(req, res) {
     req.params.id,
     { isBlocked: true },
     { new: true }
-  );
+  ).populate('owner', 'name email');
+
   if (!store) {
     return res.status(404).json({ message: 'Store not found' });
   }
+
+  await notifyStoreOwner(store, {
+    type: 'store_blocked',
+    title: 'Store blocked',
+    message: `${store.storeName} has been blocked by admin and is hidden from customers.`
+  });
+
   return res.json(store);
 }
 
@@ -68,18 +133,31 @@ async function unblockStore(req, res) {
     req.params.id,
     { isBlocked: false },
     { new: true }
-  );
+  ).populate('owner', 'name email');
+
   if (!store) {
     return res.status(404).json({ message: 'Store not found' });
   }
+
+  await notifyStoreOwner(store, {
+    type: 'store_unblocked',
+    title: 'Store unblocked',
+    message: `${store.storeName} has been unblocked by admin.`
+  });
+
   return res.json(store);
 }
 
 async function listUsers(req, res) {
-  const users = await User.find()
+  const query = {};
+  if (normalizeText(req.query.role)) {
+    query.role = normalizeText(req.query.role);
+  }
+
+  const users = await User.find(query)
     .select('name email role phone isBlocked createdAt')
     .sort({ createdAt: -1 })
-    .limit(250);
+    .limit(300);
   return res.json(users);
 }
 
@@ -104,9 +182,9 @@ async function unblockUser(req, res) {
 async function listPendingReviews(req, res) {
   const reviews = await Review.find({ status: 'Pending' })
     .populate('customer', 'name email')
-    .populate('store', 'storeName city state')
+    .populate('store', 'storeName city state owner')
     .sort({ createdAt: 1 })
-    .limit(200);
+    .limit(250);
   return res.json(reviews);
 }
 
@@ -124,12 +202,57 @@ async function moderateReview(req, res) {
       moderatedAt: new Date()
     },
     { new: true }
-  );
+  )
+    .populate('customer', 'name email')
+    .populate({
+      path: 'store',
+      select: 'storeName owner',
+      populate: {
+        path: 'owner',
+        select: 'name email'
+      }
+    });
+
   if (!review) {
     return res.status(404).json({ message: 'Review not found' });
   }
 
-  await refreshStoreRating(review.store);
+  const resolvedStoreId =
+    review.store && typeof review.store === 'object' && review.store._id
+      ? review.store._id
+      : review.store;
+  await refreshStoreRating(resolvedStoreId);
+
+  if (review.customer?._id) {
+    await notifyUser({
+      userId: review.customer._id,
+      email: review.customer.email,
+      type: 'review_moderated',
+      title: `Review ${status.toLowerCase()}`,
+      message: `Your review for ${review.store?.storeName || 'the store'} was ${status.toLowerCase()} by admin.`,
+      metadata: {
+        reviewId: String(review._id),
+        storeId: String(resolvedStoreId)
+      },
+      sendEmail: true
+    }).catch(() => {});
+  }
+
+  if (review.store?.owner?._id) {
+    await notifyUser({
+      userId: review.store.owner._id,
+      email: review.store.owner.email,
+      type: 'review_moderated',
+      title: `Review ${status.toLowerCase()} for your store`,
+      message: `A review for ${review.store.storeName} was ${status.toLowerCase()} by admin.`,
+      metadata: {
+        reviewId: String(review._id),
+        storeId: String(resolvedStoreId)
+      },
+      sendEmail: status === 'Approved'
+    }).catch(() => {});
+  }
+
   return res.json(review);
 }
 
@@ -139,14 +262,14 @@ async function listCategories(req, res) {
 }
 
 async function createCategory(req, res) {
-  const { name } = req.body || {};
+  const name = normalizeText(req.body?.name);
   if (!name) {
     return res.status(400).json({ message: 'Category name is required' });
   }
 
   const category = await Category.findOneAndUpdate(
-    { name: String(name).trim() },
-    { $setOnInsert: { name: String(name).trim(), isActive: true } },
+    { name },
+    { $setOnInsert: { name, isActive: true } },
     { upsert: true, new: true }
   );
   return res.status(201).json(category);
@@ -158,17 +281,18 @@ async function listLocations(req, res) {
 }
 
 async function createLocation(req, res) {
-  const { state, city } = req.body || {};
+  const state = normalizeText(req.body?.state);
+  const city = normalizeText(req.body?.city);
   if (!state || !city) {
     return res.status(400).json({ message: 'state and city are required' });
   }
 
   const location = await Location.findOneAndUpdate(
-    { state: String(state).trim(), city: String(city).trim() },
+    { state, city },
     {
       $setOnInsert: {
-        state: String(state).trim(),
-        city: String(city).trim(),
+        state,
+        city,
         isActive: true
       }
     },
@@ -185,19 +309,28 @@ async function dashboard(req, res) {
     activeStores,
     pendingStores,
     totalCustomers,
+    totalOwners,
     searchesCount,
-    totalReviews,
+    approvedReviews,
+    pendingReviews,
+    blockedStores,
+    blockedUsers,
     mostSearchedCityAgg,
     mostViewedStore,
     storeGrowthAgg,
-    customerGrowthAgg
+    customerGrowthAgg,
+    topCategoriesAgg
   ] = await Promise.all([
     Store.countDocuments(),
     Store.countDocuments({ status: 'Approved', isBlocked: false }),
     Store.countDocuments({ status: 'Pending' }),
     User.countDocuments({ role: 'customer' }),
+    User.countDocuments({ role: 'owner' }),
     SearchLog.countDocuments(),
     Review.countDocuments({ status: 'Approved' }),
+    Review.countDocuments({ status: 'Pending' }),
+    Store.countDocuments({ isBlocked: true }),
+    User.countDocuments({ isBlocked: true }),
     SearchLog.aggregate([
       { $match: { city: { $exists: true, $nin: [null, ''] } } },
       { $group: { _id: '$city', count: { $sum: 1 } } },
@@ -223,6 +356,12 @@ async function dashboard(req, res) {
           count: { $sum: 1 }
         }
       }
+    ]),
+    Store.aggregate([
+      { $match: { status: 'Approved', isBlocked: false } },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
     ])
   ]);
 
@@ -235,25 +374,53 @@ async function dashboard(req, res) {
     customers: customerGrowthMap.get(month) || 0
   }));
 
+  const mostSearchedCity = mostSearchedCityAgg[0]
+    ? { city: mostSearchedCityAgg[0]._id, count: mostSearchedCityAgg[0].count }
+    : null;
+  const resolvedMostViewedStore = mostViewedStore
+    ? {
+        storeName: mostViewedStore.storeName,
+        city: mostViewedStore.city,
+        state: mostViewedStore.state,
+        viewCount: mostViewedStore.viewCount
+      }
+    : null;
+
   return res.json({
     totalStores,
     activeStores,
     pendingStores,
     totalCustomers,
+    totalOwners,
     searchesCount,
-    totalReviews,
-    mostSearchedCity: mostSearchedCityAgg[0]
-      ? { city: mostSearchedCityAgg[0]._id, count: mostSearchedCityAgg[0].count }
-      : null,
-    mostViewedStore: mostViewedStore
-      ? {
-          storeName: mostViewedStore.storeName,
-          city: mostViewedStore.city,
-          state: mostViewedStore.state,
-          viewCount: mostViewedStore.viewCount
-        }
-      : null,
-    monthlyGrowth
+    totalReviews: approvedReviews,
+    approvedReviews,
+    pendingReviews,
+    blockedStores,
+    blockedUsers,
+    mostSearchedCity,
+    mostViewedStore: resolvedMostViewedStore,
+    monthlyGrowth,
+    topCategories: topCategoriesAgg.map((item) => ({
+      category: item._id || 'Uncategorized',
+      count: item.count
+    })),
+    totals: {
+      stores: totalStores,
+      activeStores,
+      pendingStores,
+      customers: totalCustomers,
+      owners: totalOwners,
+      searches: searchesCount,
+      approvedReviews,
+      pendingReviews,
+      blockedStores,
+      blockedUsers
+    },
+    highlights: {
+      mostSearchedCity,
+      mostViewedStore: resolvedMostViewedStore
+    }
   });
 }
 

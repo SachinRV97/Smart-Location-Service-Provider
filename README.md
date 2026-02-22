@@ -1,89 +1,144 @@
 # Smart Location Service Provider
 
-Smart Location Service Provider is a Node.js + Express + MongoDB web application for discovering verified stores by state, city, and store name with role-based flows for customers, owners, and admins.
+Smart Location Service Provider is a Node.js + Express + MongoDB web platform that helps customers discover verified local stores by state, city, category, and name, with owner onboarding and admin moderation.
 
-## Technology stack
+## Stack
 
 - Backend: Node.js, Express.js
 - Database: MongoDB with Mongoose
-- Frontend: HTML, CSS, vanilla JS
-- Map integration: Leaflet + OpenStreetMap tiles
-- Authentication: JWT
+- Frontend: HTML, CSS, vanilla JavaScript
+- Maps: Leaflet + OpenStreetMap
+- Auth: JWT
 
-## Implemented modules (aligned to synopsis)
+## Implemented Modules
 
-### Home / Discovery module
+### 1. Home / Discovery Module
 
-- State and city dropdown filters (dynamic API based)
-- Store name/category search
-- Advanced filters: open now, top rated, nearest first
-- Auto location detection for nearest stores
-- Interactive map with store markers and focus behavior
+- State and city dropdown filters (city loads dynamically by selected state)
+- Store/shop search by name, city, state, and category
+- Advanced filters:
+  - Open now
+  - Top rated
+  - Nearest first
+- Auto location detection
+- Interactive map with live markers
+- Marker/list click opens full store detail view
 
-### Store module (owner)
+### 2. Store Module (Owner)
 
-- Store registration with full fields:
-  - store name, owner name, email, phone
-  - state, city, full address
-  - latitude/longitude
-  - category, opening/closing, description, images, GST
-- Submitted stores default to `Pending`
-- Owner view for submitted stores and their statuses
+- Full store registration:
+  - Store name, owner name, email, phone
+  - State, city, full address
+  - Latitude and longitude (map pin + geolocation)
+  - Category
+  - Opening and closing time
+  - Description, images, GST
+- Every new store is created with `Pending` status
+- Only admin-approved stores are shown to customers
 
-### Admin module
+### 3. Admin Module
 
-- Admin login (JWT role)
-- Dashboard analytics:
-  - total stores, active stores, pending stores
-  - total customers, total searches, total approved reviews
-  - most searched city
-  - most viewed store
-  - monthly growth (stores/customers)
-- Store moderation: approve/reject/block/unblock
-- User management: list/block/unblock
-- Review moderation: approve/reject pending reviews
+- Admin-protected dashboard
+- Store moderation:
+  - Approve / reject
+  - Block / unblock
+- User management:
+  - List users
+  - Block / unblock users
+- Review moderation:
+  - Approve / reject customer reviews
+- Analytics:
+  - Total stores, active stores, pending stores
+  - Total customers, total owners
+  - Search count
+  - Approved and pending review counts
+  - Most searched city
+  - Most viewed store
+  - Monthly growth chart (stores vs customers)
+  - Top categories
 - Category management
 - State/city management
 
-### Customer module
+### 4. Customer Module
 
 - Register/login
-- Search stores and view full details
-- Favorite stores (save/remove/list)
-- Rate and review stores (admin moderation flow)
-- Store detail includes call now + direction link
+- Search approved stores
+- View store details
+- Save/remove favorites
+- Add ratings and reviews
+- View approved ratings/reviews
+- Call store and open directions
 
-## Quick start
+### 5. Notifications
+
+- In-app notifications for:
+  - New store submitted (to admins)
+  - Store approved/rejected/blocked/unblocked (to owner)
+  - New review added (to owner)
+  - Review moderated (to customer and owner)
+- Optional email delivery via webhook integration
+
+## Project Structure
+
+```
+public/        # HTML/CSS/JS frontend
+src/
+  config/      # DB config
+  controllers/ # Route handlers
+  middleware/  # Auth and RBAC middleware
+  models/      # Mongoose schemas
+  routes/      # API route definitions
+  services/    # Ratings and notification services
+  utils/       # JWT utility
+tests/         # Node test files
+```
+
+## Environment Variables
+
+Create `.env`:
+
+```env
+PORT=5000
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=your_secret
+JWT_EXPIRES_IN=7d
+
+# Optional notification email webhook
+EMAIL_WEBHOOK_URL=
+EMAIL_WEBHOOK_AUTH=
+EMAIL_FROM_NAME=Smart Location Service Provider
+```
+
+## Run Locally
 
 1. Install dependencies
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-2. Configure environment variables in `.env`
+2. Start server
 
-   ```env
-   PORT=5000
-   MONGODB_URI=...
-   JWT_SECRET=...
-   JWT_EXPIRES_IN=7d
-   ```
+```bash
+npm run dev
+```
 
-3. Run
+3. Open in browser
 
-   ```bash
-   npm run dev
-   ```
+- Home: `http://localhost:5000/index.html`
+- Auth: `http://localhost:5000/auth.html`
+- Discovery: `http://localhost:5000/stores.html`
+- Owner: `http://localhost:5000/owner.html`
+- Admin: `http://localhost:5000/admin.html`
 
-## API overview
+## API Overview
 
 ### Auth
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 
-### Meta (state/city/category)
+### Meta
 
 - `GET /api/meta/states`
 - `GET /api/meta/cities?state=...`
@@ -96,11 +151,11 @@ Smart Location Service Provider is a Node.js + Express + MongoDB web application
 - `GET /api/stores/mine` (owner/admin)
 - `POST /api/stores` (owner/admin)
 
-### Favorites (customer)
+### Favorites
 
-- `GET /api/favorites/me`
-- `POST /api/favorites/:storeId`
-- `DELETE /api/favorites/:storeId`
+- `GET /api/favorites/me` (customer)
+- `POST /api/favorites/:storeId` (customer)
+- `DELETE /api/favorites/:storeId` (customer)
 
 ### Reviews
 
@@ -126,8 +181,8 @@ Smart Location Service Provider is a Node.js + Express + MongoDB web application
 - `GET /api/admin/locations`
 - `POST /api/admin/locations`
 
-## Notes
+### Notifications
 
-- Store search only returns `Approved` and unblocked stores.
-- Submitted reviews are `Pending` until admin moderation.
-- Store details include approved reviews and favorite status when customer is logged in.
+- `GET /api/notifications/me`
+- `PATCH /api/notifications/read-all`
+- `PATCH /api/notifications/:id/read`

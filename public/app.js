@@ -6,11 +6,29 @@ const state = {
   ownerMap: null,
   ownerMarker: null,
   markersByStoreId: new Map(),
-  selectedStoreId: ''
+  selectedStoreId: '',
+  selectedMarkerId: '',
+  storeSearchTimer: null
 };
 
 const toastEl = document.getElementById('toast');
 const userDisplays = [...document.querySelectorAll('#user-display')];
+
+const DEFAULT_MARKER_STYLE = {
+  radius: 8,
+  color: '#1565c0',
+  weight: 2,
+  fillColor: '#2c8be5',
+  fillOpacity: 0.9
+};
+
+const ACTIVE_MARKER_STYLE = {
+  radius: 10,
+  color: '#b34700',
+  weight: 2,
+  fillColor: '#ff8f1f',
+  fillOpacity: 0.95
+};
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -27,7 +45,7 @@ function showToast(message, kind = 'success') {
   toastEl.className = `toast show ${kind}`;
   setTimeout(() => {
     toastEl.className = 'toast';
-  }, 2200);
+  }, 2300);
 }
 
 function setSession(token, user) {
@@ -54,10 +72,10 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
-  const res = await fetch(path, { ...options, headers });
-  const text = await res.text();
+  const response = await fetch(path, { ...options, headers });
+  const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
-  if (!res.ok) {
+  if (!response.ok) {
     throw new Error(payload?.message || 'Request failed');
   }
   return payload;
@@ -66,8 +84,8 @@ async function api(path, options = {}) {
 function formToObject(form) {
   const data = new FormData(form);
   const obj = {};
-  for (const [k, v] of data.entries()) {
-    obj[k] = typeof v === 'string' ? v.trim() : v;
+  for (const [key, value] of data.entries()) {
+    obj[key] = typeof value === 'string' ? value.trim() : value;
   }
   return obj;
 }
@@ -88,33 +106,41 @@ function initializeTabs() {
 
 function fillSelect(selectEl, values, placeholderLabel) {
   if (!selectEl) return;
+  const normalizedValues = [...new Set(values.filter(Boolean))];
   const currentValue = selectEl.value;
   const options = [`<option value="">${escapeHtml(placeholderLabel)}</option>`]
     .concat(
-      values.map(
-        (value) =>
-          `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`
+      normalizedValues.map(
+        (value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`
       )
     )
     .join('');
 
   selectEl.innerHTML = options;
-  if (currentValue && values.includes(currentValue)) {
+  if (currentValue && normalizedValues.includes(currentValue)) {
     selectEl.value = currentValue;
   }
 }
 
-async function loadCitiesByState(stateName, citySelect) {
+async function loadCitiesByState(stateName, citySelect, placeholder = 'All Cities') {
   if (!citySelect) return;
   if (!stateName) {
-    fillSelect(citySelect, [], 'All Cities');
+    fillSelect(citySelect, [], placeholder);
     return;
   }
+
   const cities = await api(`/api/meta/cities?state=${encodeURIComponent(stateName)}`);
-  fillSelect(citySelect, cities, 'All Cities');
+  fillSelect(citySelect, cities, placeholder);
 }
 
-async function loadMetaFilters({ stateSelect, citySelect, categorySelect, statePlaceholder = 'All States', cityPlaceholder = 'All Cities' }) {
+async function loadMetaFilters({
+  stateSelect,
+  citySelect,
+  categorySelect,
+  statePlaceholder = 'All States',
+  cityPlaceholder = 'All Cities',
+  categoryPlaceholder = 'All Categories'
+}) {
   const [states, categories] = await Promise.all([
     api('/api/meta/states'),
     api('/api/meta/categories')
@@ -122,7 +148,7 @@ async function loadMetaFilters({ stateSelect, citySelect, categorySelect, stateP
 
   fillSelect(stateSelect, states, statePlaceholder);
   fillSelect(citySelect, [], cityPlaceholder);
-  fillSelect(categorySelect, categories, 'All Categories');
+  fillSelect(categorySelect, categories, categoryPlaceholder);
 }
 
 function parseCoordinates(store) {
@@ -143,7 +169,55 @@ function getDirectionsUrl(store) {
   if (coords) {
     return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
   }
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.fullAddress || `${store.city}, ${store.state}`)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    store.fullAddress || `${store.city || ''}, ${store.state || ''}`
+  )}`;
+}
+
+function renderNotifications(notifications) {
+  const listEl = document.getElementById('notification-list');
+  if (!listEl) return;
+
+  if (!state.user) {
+    listEl.innerHTML = '<li>Login to view notifications.</li>';
+    return;
+  }
+
+  if (!notifications.length) {
+    listEl.innerHTML = '<li>No notifications found.</li>';
+    return;
+  }
+
+  listEl.innerHTML = notifications
+    .map(
+      (item) => `
+        <li class="${item.isRead ? '' : 'unread-item'}">
+          <div class="row">
+            <strong>${escapeHtml(item.title || 'Notification')}</strong>
+            <small>${item.isRead ? 'Read' : 'Unread'}</small>
+          </div>
+          <div>${escapeHtml(item.message || '')}</div>
+          <div class="row">
+            <small>${new Date(item.createdAt).toLocaleString()}</small>
+            ${item.isRead ? '' : `<button class="small secondary" data-notification-id="${escapeHtml(item._id)}">Mark Read</button>`}
+          </div>
+        </li>`
+    )
+    .join('');
+}
+
+async function loadMyNotifications() {
+  if (!state.user) {
+    renderNotifications([]);
+    return;
+  }
+
+  try {
+    const notifications = await api('/api/notifications/me?limit=20');
+    renderNotifications(notifications);
+  } catch {
+    renderNotifications([]);
+  }
 }
 
 function initializeAuthPage() {
@@ -161,6 +235,7 @@ function initializeAuthPage() {
         setSession(data.token, data.user);
         event.currentTarget.reset();
         showToast('Registration successful.');
+        loadMyNotifications();
       } catch (error) {
         showToast(error.message, 'error');
       }
@@ -181,6 +256,7 @@ function initializeAuthPage() {
         setSession(data.token, data.user);
         event.currentTarget.reset();
         showToast('Logged in successfully.');
+        loadMyNotifications();
       } catch (error) {
         showToast(error.message, 'error');
       }
@@ -192,8 +268,45 @@ function initializeAuthPage() {
     logoutBtn.addEventListener('click', () => {
       setSession('', null);
       showToast('Logged out.');
+      loadMyNotifications();
     });
   }
+
+  const refreshNotificationsBtn = document.getElementById('refresh-notifications-btn');
+  refreshNotificationsBtn?.addEventListener('click', () => {
+    loadMyNotifications();
+  });
+
+  const markAllReadBtn = document.getElementById('mark-all-read-btn');
+  markAllReadBtn?.addEventListener('click', async () => {
+    if (!state.user) {
+      showToast('Login first.', 'error');
+      return;
+    }
+    try {
+      await api('/api/notifications/read-all', { method: 'PATCH' });
+      showToast('All notifications marked as read.');
+      loadMyNotifications();
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  const notificationList = document.getElementById('notification-list');
+  notificationList?.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-notification-id]');
+    if (!button) return;
+    try {
+      await api(`/api/notifications/${button.dataset.notificationId}/read`, {
+        method: 'PATCH'
+      });
+      loadMyNotifications();
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  loadMyNotifications();
 }
 
 function initializeStoreMap() {
@@ -206,6 +319,20 @@ function initializeStoreMap() {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(state.storesMap);
+}
+
+function clearStoreMarkers() {
+  if (!state.storesMap) return;
+  state.markersByStoreId.forEach((marker) => marker.remove());
+  state.markersByStoreId.clear();
+  state.selectedMarkerId = '';
+}
+
+function highlightStoreMarker(storeId) {
+  state.markersByStoreId.forEach((marker, id) => {
+    marker.setStyle(id === storeId ? ACTIVE_MARKER_STYLE : DEFAULT_MARKER_STYLE);
+  });
+  state.selectedMarkerId = storeId || '';
 }
 
 function renderStoreList(stores) {
@@ -221,9 +348,12 @@ function renderStoreList(stores) {
 
   storesList.innerHTML = stores
     .map((store) => {
-      const distance = store.distanceMeters ? `<small>${metersToKm(store.distanceMeters)}</small>` : '';
+      const isSelected = state.selectedStoreId === store._id;
+      const distance = store.distanceMeters
+        ? `<small>${metersToKm(store.distanceMeters)}</small>`
+        : '';
       return `
-        <li data-store-id="${escapeHtml(store._id)}">
+        <li data-store-id="${escapeHtml(store._id)}" class="${isSelected ? 'selected-item' : ''}">
           <div class="row">
             <strong>${escapeHtml(store.storeName)}</strong>
             <span>${escapeHtml(store.category || 'General')}</span>
@@ -242,12 +372,6 @@ function renderStoreList(stores) {
   }
 }
 
-function clearStoreMarkers() {
-  if (!state.storesMap) return;
-  state.markersByStoreId.forEach((marker) => marker.remove());
-  state.markersByStoreId.clear();
-}
-
 function renderStoreMarkers(stores) {
   if (!state.storesMap) return;
   clearStoreMarkers();
@@ -257,8 +381,12 @@ function renderStoreMarkers(stores) {
     const coords = parseCoordinates(store);
     if (!coords) return;
 
-    const marker = L.marker([coords.lat, coords.lng]).addTo(state.storesMap);
-    marker.bindPopup(`<strong>${escapeHtml(store.storeName)}</strong><br>${escapeHtml(store.city || '')}, ${escapeHtml(store.state || '')}`);
+    const marker = L.circleMarker([coords.lat, coords.lng], DEFAULT_MARKER_STYLE).addTo(
+      state.storesMap
+    );
+    marker.bindPopup(
+      `<strong>${escapeHtml(store.storeName)}</strong><br>${escapeHtml(store.city || '')}, ${escapeHtml(store.state || '')}`
+    );
     marker.on('click', () => loadStoreDetail(store._id));
     state.markersByStoreId.set(store._id, marker);
     bounds.push([coords.lat, coords.lng]);
@@ -273,35 +401,45 @@ function renderStoreDetail(store) {
   const detailEl = document.getElementById('store-detail');
   if (!detailEl) return;
 
-  const imageHtml = Array.isArray(store.images) && store.images.length
-    ? store.images
-        .map(
-          (url) =>
-            `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Photo</a>`
-        )
-        .join(' | ')
-    : 'No photos';
+  const imageHtml =
+    Array.isArray(store.images) && store.images.length
+      ? store.images
+          .map(
+            (url) =>
+              `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Photo</a>`
+          )
+          .join(' | ')
+      : 'No photos';
 
   const reviewsHtml = store.reviews?.length
     ? `<ul class="reviews-list">${store.reviews
         .map(
-          (review) => `<li><strong>${escapeHtml(review.customer?.name || 'Customer')}</strong>: ${Number(review.rating).toFixed(1)} / 5${review.comment ? ` - ${escapeHtml(review.comment)}` : ''}</li>`
+          (review) =>
+            `<li><strong>${escapeHtml(
+              review.customer?.name || 'Customer'
+            )}</strong>: ${Number(review.rating).toFixed(1)} / 5${
+              review.comment ? ` - ${escapeHtml(review.comment)}` : ''
+            }</li>`
         )
         .join('')}</ul>`
     : '<p class="hint">No approved reviews yet.</p>';
 
-  const reviewFormHtml = state.user?.role === 'customer'
-    ? `
+  const reviewFormHtml =
+    state.user?.role === 'customer'
+      ? `
       <form id="review-form" class="inline-form">
         <input type="number" step="1" min="1" max="5" name="rating" placeholder="Rating 1-5" required />
         <input name="comment" placeholder="Write a short review" />
         <button type="submit">Submit Review</button>
       </form>`
-    : '';
+      : '';
 
-  const favoriteButton = state.user?.role === 'customer'
-    ? `<button id="favorite-btn" class="secondary" data-favorite="${store.isFavorite ? 'remove' : 'add'}">${store.isFavorite ? 'Remove Favorite' : 'Save to Favorite'}</button>`
-    : '';
+  const favoriteButton =
+    state.user?.role === 'customer'
+      ? `<button id="favorite-btn" class="secondary" data-favorite="${
+          store.isFavorite ? 'remove' : 'add'
+        }">${store.isFavorite ? 'Remove Favorite' : 'Save to Favorite'}</button>`
+      : '';
 
   detailEl.innerHTML = `
     <h3>${escapeHtml(store.storeName)}</h3>
@@ -310,14 +448,20 @@ function renderStoreDetail(store) {
       <div><strong>Address:</strong> ${escapeHtml(store.fullAddress || 'N/A')}</div>
       <div><strong>Phone:</strong> ${escapeHtml(store.phone || 'N/A')}</div>
       <div><strong>Owner:</strong> ${escapeHtml(store.ownerName || 'N/A')}</div>
-      <div><strong>Open Hours:</strong> ${escapeHtml(store.openingTime || '--')} - ${escapeHtml(store.closingTime || '--')}</div>
-      <div><strong>Rating:</strong> ${Number(store.ratingAverage || 0).toFixed(1)} (${store.ratingCount || 0})</div>
+      <div><strong>Open Hours:</strong> ${escapeHtml(store.openingTime || '--')} - ${escapeHtml(
+    store.closingTime || '--'
+  )}</div>
+      <div><strong>Rating:</strong> ${Number(store.ratingAverage || 0).toFixed(1)} (${
+    store.ratingCount || 0
+  })</div>
       <div><strong>Photos:</strong> ${imageHtml}</div>
       <div><strong>Description:</strong> ${escapeHtml(store.description || 'N/A')}</div>
     </div>
-    <div class="button-row" style="margin-top: 0.8rem;">
+    <div class="button-row" style="margin-top:0.8rem">
       <a href="tel:${escapeHtml(store.phone || '')}"><button type="button">Call Now</button></a>
-      <a href="${getDirectionsUrl(store)}" target="_blank" rel="noreferrer"><button type="button" class="secondary">Get Direction</button></a>
+      <a href="${getDirectionsUrl(
+        store
+      )}" target="_blank" rel="noreferrer"><button type="button" class="secondary">Get Direction</button></a>
       ${favoriteButton}
     </div>
     <h4>Ratings & Reviews</h4>
@@ -331,21 +475,21 @@ async function loadStoreDetail(storeId) {
     state.selectedStoreId = storeId;
     const store = await api(`/api/stores/${storeId}`);
     renderStoreDetail(store);
+    renderStoreList(state.stores);
+    highlightStoreMarker(storeId);
+
+    const marker = state.markersByStoreId.get(storeId);
     const coords = parseCoordinates(store);
     if (coords && state.storesMap) {
-      state.storesMap.setView([coords.lat, coords.lng], 14);
-      const marker = state.markersByStoreId.get(storeId);
-      if (marker) marker.openPopup();
+      state.storesMap.setView([coords.lat, coords.lng], 15);
+      marker?.openPopup();
     }
   } catch (error) {
     showToast(error.message, 'error');
   }
 }
 
-async function runStoreSearch() {
-  const searchForm = document.getElementById('search-form');
-  if (!searchForm) return;
-
+function buildSearchParamsFromForm(searchForm) {
   const data = new FormData(searchForm);
   const params = new URLSearchParams();
   for (const [key, value] of data.entries()) {
@@ -356,11 +500,36 @@ async function runStoreSearch() {
       params.set(key, String(value).trim());
     }
   }
+  return params;
+}
 
+async function runStoreSearch({ autoSelectFirst = false } = {}) {
+  const searchForm = document.getElementById('search-form');
+  if (!searchForm) return;
+
+  const params = buildSearchParamsFromForm(searchForm);
   const stores = await api(`/api/stores?${params.toString()}`);
   state.stores = stores;
+  if (!stores.find((item) => item._id === state.selectedStoreId)) {
+    state.selectedStoreId = '';
+  }
+
   renderStoreList(stores);
   renderStoreMarkers(stores);
+  if (state.selectedStoreId) {
+    highlightStoreMarker(state.selectedStoreId);
+  }
+
+  if (autoSelectFirst && stores.length === 1) {
+    await loadStoreDetail(stores[0]._id);
+  }
+}
+
+function scheduleStoreSearch(options = {}, delay = 350) {
+  clearTimeout(state.storeSearchTimer);
+  state.storeSearchTimer = setTimeout(() => {
+    runStoreSearch(options).catch((error) => showToast(error.message, 'error'));
+  }, delay);
 }
 
 async function detectCurrentLocation({ latInput, lngInput, onSuccess }) {
@@ -398,6 +567,8 @@ function initializeStorePage() {
   const favoritesBtn = document.getElementById('my-favorites-btn');
   const storesList = document.getElementById('stores-list');
   const detailEl = document.getElementById('store-detail');
+  const queryInput = searchForm.querySelector('input[name="q"]');
+  const filterCheckboxes = [...searchForm.querySelectorAll('input[type="checkbox"]')];
 
   loadMetaFilters({ stateSelect, citySelect, categorySelect }).catch((error) => {
     showToast(error.message, 'error');
@@ -405,16 +576,35 @@ function initializeStorePage() {
 
   stateSelect?.addEventListener('change', async () => {
     try {
-      await loadCitiesByState(stateSelect.value, citySelect);
+      await loadCitiesByState(stateSelect.value, citySelect, 'All Cities');
+      scheduleStoreSearch({}, 120);
     } catch (error) {
       showToast(error.message, 'error');
     }
   });
 
+  citySelect?.addEventListener('change', () => {
+    scheduleStoreSearch({}, 120);
+  });
+
+  categorySelect?.addEventListener('change', () => {
+    scheduleStoreSearch({}, 120);
+  });
+
+  queryInput?.addEventListener('input', () => {
+    scheduleStoreSearch({}, 360);
+  });
+
+  filterCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      scheduleStoreSearch({}, 150);
+    });
+  });
+
   searchForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
-      await runStoreSearch();
+      await runStoreSearch({ autoSelectFirst: true });
     } catch (error) {
       showToast(error.message, 'error');
     }
@@ -425,9 +615,12 @@ function initializeStorePage() {
       latInput: nearestLatInput,
       lngInput: nearestLngInput,
       onSuccess: (lat, lng) => {
+        const nearestCheckbox = searchForm.querySelector('input[name="nearestFirst"]');
+        if (nearestCheckbox) nearestCheckbox.checked = true;
         if (state.storesMap) {
           state.storesMap.setView([lat, lng], 13);
         }
+        runStoreSearch().catch((error) => showToast(error.message, 'error'));
       }
     });
   });
@@ -440,8 +633,10 @@ function initializeStorePage() {
     try {
       const favorites = await api('/api/favorites/me');
       state.stores = favorites;
+      state.selectedStoreId = '';
       renderStoreList(favorites);
       renderStoreMarkers(favorites);
+      showToast('Loaded favorite stores.');
     } catch (error) {
       showToast(error.message, 'error');
     }
@@ -489,10 +684,13 @@ function initializeStorePage() {
       showToast('Review submitted for moderation.');
       event.target.reset();
       await loadStoreDetail(state.selectedStoreId);
+      loadMyNotifications();
     } catch (error) {
       showToast(error.message, 'error');
     }
   });
+
+  runStoreSearch().catch(() => {});
 }
 
 function initializeOwnerMap(latInput, lngInput) {
@@ -507,17 +705,28 @@ function initializeOwnerMap(latInput, lngInput) {
   }).addTo(state.ownerMap);
 
   state.ownerMarker = L.marker([20.5937, 78.9629], { draggable: true }).addTo(state.ownerMap);
+  latInput.value = '20.593700';
+  lngInput.value = '78.962900';
+
   state.ownerMarker.on('dragend', () => {
     const pos = state.ownerMarker.getLatLng();
     latInput.value = pos.lat.toFixed(6);
     lngInput.value = pos.lng.toFixed(6);
+  });
+
+  state.ownerMap.on('click', (event) => {
+    state.ownerMarker.setLatLng(event.latlng);
+    latInput.value = event.latlng.lat.toFixed(6);
+    lngInput.value = event.latlng.lng.toFixed(6);
   });
 }
 
 function updateOwnerMarkerFromInputs(latInput, lngInput) {
   const lat = Number(latInput.value);
   const lng = Number(lngInput.value);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !state.ownerMap || !state.ownerMarker) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !state.ownerMap || !state.ownerMarker) {
+    return;
+  }
   state.ownerMarker.setLatLng([lat, lng]);
   state.ownerMap.setView([lat, lng], 13);
 }
@@ -542,8 +751,20 @@ async function loadOwnerStores(listEl) {
           )
           .join('')
       : '<li>No stores submitted yet.</li>';
-  } catch (error) {
+  } catch {
     listEl.innerHTML = '<li>Login as owner to view your stores.</li>';
+  }
+}
+
+function prefillOwnerForm(storeForm) {
+  if (!storeForm || !state.user) return;
+  const ownerNameInput = storeForm.querySelector('input[name="ownerName"]');
+  const emailInput = storeForm.querySelector('input[name="email"]');
+  if (ownerNameInput && !ownerNameInput.value) {
+    ownerNameInput.value = state.user.name || '';
+  }
+  if (emailInput && !emailInput.value) {
+    emailInput.value = state.user.email || '';
   }
 }
 
@@ -564,21 +785,20 @@ function initializeOwnerPage() {
     citySelect,
     categorySelect,
     statePlaceholder: 'Select State',
-    cityPlaceholder: 'Select City'
-  }).catch((error) => {
-    showToast(error.message, 'error');
-  });
+    cityPlaceholder: 'Select City',
+    categoryPlaceholder: 'Select Category'
+  }).catch((error) => showToast(error.message, 'error'));
 
   stateSelect?.addEventListener('change', async () => {
     try {
-      await loadCitiesByState(stateSelect.value, citySelect);
-      citySelect.querySelector('option').textContent = 'Select City';
+      await loadCitiesByState(stateSelect.value, citySelect, 'Select City');
     } catch (error) {
       showToast(error.message, 'error');
     }
   });
 
   initializeOwnerMap(latInput, lngInput);
+  prefillOwnerForm(storeForm);
 
   latInput?.addEventListener('input', () => updateOwnerMarkerFromInputs(latInput, lngInput));
   lngInput?.addEventListener('input', () => updateOwnerMarkerFromInputs(latInput, lngInput));
@@ -606,8 +826,10 @@ function initializeOwnerPage() {
         body: JSON.stringify(payload)
       });
       event.currentTarget.reset();
+      prefillOwnerForm(storeForm);
       showToast('Store submitted. Waiting for admin approval.');
       loadOwnerStores(ownerStoreList);
+      loadMyNotifications();
     } catch (error) {
       showToast(error.message, 'error');
     }
@@ -616,10 +838,150 @@ function initializeOwnerPage() {
   loadOwnerStores(ownerStoreList);
 }
 
+function monthLabel(value) {
+  if (!value || !value.includes('-')) return value || '';
+  const [year, month] = value.split('-');
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+}
+
+function drawGrowthChart(monthlyGrowth) {
+  const canvas = document.getElementById('growth-chart');
+  if (!canvas || !canvas.getContext) return;
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!monthlyGrowth?.length) {
+    ctx.fillStyle = '#6f7a8c';
+    ctx.font = '14px Manrope, sans-serif';
+    ctx.fillText('No growth data', 20, 30);
+    return;
+  }
+
+  const padding = 40;
+  const chartW = w - padding * 2;
+  const chartH = h - padding * 2;
+  const maxValue = Math.max(
+    1,
+    ...monthlyGrowth.map((item) => Math.max(item.stores || 0, item.customers || 0))
+  );
+
+  function pointAt(index, value) {
+    const x = padding + (chartW / Math.max(monthlyGrowth.length - 1, 1)) * index;
+    const y = padding + chartH - (value / maxValue) * chartH;
+    return { x, y };
+  }
+
+  ctx.strokeStyle = '#d7dee9';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = padding + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padding, y);
+    ctx.lineTo(padding + chartW, y);
+    ctx.stroke();
+  }
+
+  const series = [
+    { key: 'stores', color: '#0f78d4', label: 'Stores' },
+    { key: 'customers', color: '#de6c19', label: 'Customers' }
+  ];
+
+  series.forEach((item) => {
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    monthlyGrowth.forEach((point, index) => {
+      const p = pointAt(index, point[item.key] || 0);
+      if (index === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = item.color;
+    monthlyGrowth.forEach((point, index) => {
+      const p = pointAt(index, point[item.key] || 0);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+
+  ctx.fillStyle = '#203047';
+  ctx.font = '12px Manrope, sans-serif';
+  monthlyGrowth.forEach((item, index) => {
+    const p = pointAt(index, 0);
+    ctx.fillText(monthLabel(item.month), p.x - 18, h - 12);
+  });
+
+  ctx.fillStyle = '#0f78d4';
+  ctx.fillRect(padding, 10, 14, 4);
+  ctx.fillStyle = '#203047';
+  ctx.fillText('Stores', padding + 20, 16);
+
+  ctx.fillStyle = '#de6c19';
+  ctx.fillRect(padding + 82, 10, 14, 4);
+  ctx.fillStyle = '#203047';
+  ctx.fillText('Customers', padding + 102, 16);
+}
+
+function setTextById(id, value, fallback = '--') {
+  const element = document.getElementById(id);
+  if (!element) return;
+  const finalValue = value ?? fallback;
+  element.textContent =
+    typeof finalValue === 'number' ? finalValue.toLocaleString() : String(finalValue);
+}
+
 function renderDashboard(dashboard) {
-  const output = document.getElementById('dashboard-output');
-  if (!output) return;
-  output.textContent = JSON.stringify(dashboard, null, 2);
+  setTextById('metric-total-stores', dashboard.totalStores);
+  setTextById('metric-active-stores', dashboard.activeStores);
+  setTextById('metric-pending-stores', dashboard.pendingStores);
+  setTextById('metric-total-customers', dashboard.totalCustomers);
+  setTextById('metric-total-owners', dashboard.totalOwners);
+  setTextById('metric-search-count', dashboard.searchesCount);
+  setTextById('metric-approved-reviews', dashboard.approvedReviews ?? dashboard.totalReviews);
+  setTextById('metric-pending-reviews', dashboard.pendingReviews);
+  setTextById('metric-blocked-stores', dashboard.blockedStores);
+
+  setTextById(
+    'highlight-most-searched-city',
+    dashboard.mostSearchedCity
+      ? `${dashboard.mostSearchedCity.city} (${dashboard.mostSearchedCity.count})`
+      : 'No search data'
+  );
+
+  setTextById(
+    'highlight-most-viewed-store',
+    dashboard.mostViewedStore
+      ? `${dashboard.mostViewedStore.storeName} (${dashboard.mostViewedStore.viewCount} views)`
+      : 'No store view data'
+  );
+
+  const topCategoriesEl = document.getElementById('top-categories-list');
+  if (topCategoriesEl) {
+    const categories = dashboard.topCategories || [];
+    topCategoriesEl.innerHTML = categories.length
+      ? categories
+          .map(
+            (item) =>
+              `<li><strong>${escapeHtml(item.category)}</strong><span>${Number(
+                item.count || 0
+              ).toLocaleString()}</span></li>`
+          )
+          .join('')
+      : '<li>No category data</li>';
+  }
+
+  const rawOutputEl = document.getElementById('dashboard-output');
+  if (rawOutputEl) {
+    rawOutputEl.textContent = JSON.stringify(dashboard, null, 2);
+  }
+
+  drawGrowthChart(dashboard.monthlyGrowth || []);
 }
 
 async function loadPendingStores() {
@@ -639,15 +1001,59 @@ async function loadPendingStores() {
               <div class="row">
                 <small>Status: ${escapeHtml(store.status || 'Pending')}</small>
                 <div class="button-row">
-                  <button class="small" data-id="${escapeHtml(store._id)}" data-action="approve">Approve</button>
-                  <button class="small secondary" data-id="${escapeHtml(store._id)}" data-action="reject">Reject</button>
-                  <button class="small secondary" data-id="${escapeHtml(store._id)}" data-action="block">Block</button>
+                  <button class="small" data-store-id="${escapeHtml(store._id)}" data-store-action="approve">Approve</button>
+                  <button class="small secondary" data-store-id="${escapeHtml(store._id)}" data-store-action="reject">Reject</button>
+                  <button class="small secondary" data-store-id="${escapeHtml(store._id)}" data-store-action="block">Block</button>
                 </div>
               </div>
             </li>`
         )
         .join('')
     : '<li>No pending stores right now.</li>';
+}
+
+function buildStoreActions(store) {
+  const actions = [];
+  if (store.status !== 'Approved') actions.push('approve');
+  if (store.status !== 'Rejected') actions.push('reject');
+  actions.push(store.isBlocked ? 'unblock' : 'block');
+  return actions;
+}
+
+async function loadAllStores() {
+  const allStoresList = document.getElementById('all-stores-list');
+  if (!allStoresList) return;
+
+  const stores = await api('/api/admin/stores');
+  allStoresList.innerHTML = stores.length
+    ? stores
+        .map((store) => {
+          const actions = buildStoreActions(store)
+            .map(
+              (action) =>
+                `<button class="small ${
+                  action === 'approve' ? '' : 'secondary'
+                }" data-store-id="${escapeHtml(store._id)}" data-store-action="${action}">${
+                  action.charAt(0).toUpperCase() + action.slice(1)
+                }</button>`
+            )
+            .join('');
+
+          return `
+            <li>
+              <div class="row">
+                <strong>${escapeHtml(store.storeName)}</strong>
+                <span>${escapeHtml(store.city || '')}, ${escapeHtml(store.state || '')}</span>
+              </div>
+              <div class="row">
+                <small>Status: ${escapeHtml(store.status || 'Pending')}</small>
+                <small>Blocked: ${store.isBlocked ? 'Yes' : 'No'}</small>
+              </div>
+              <div class="button-row">${actions}</div>
+            </li>`;
+        })
+        .join('')
+    : '<li>No stores found.</li>';
 }
 
 async function loadUsers() {
@@ -667,7 +1073,11 @@ async function loadUsers() {
               <div>${escapeHtml(user.email)}</div>
               <div class="row">
                 <small>Blocked: ${user.isBlocked ? 'Yes' : 'No'}</small>
-                <button class="small ${user.isBlocked ? '' : 'secondary'}" data-user-id="${escapeHtml(user._id)}" data-user-action="${user.isBlocked ? 'unblock' : 'block'}">${user.isBlocked ? 'Unblock' : 'Block'}</button>
+                <button class="small ${
+                  user.isBlocked ? '' : 'secondary'
+                }" data-user-id="${escapeHtml(user._id)}" data-user-action="${
+                  user.isBlocked ? 'unblock' : 'block'
+                }">${user.isBlocked ? 'Unblock' : 'Block'}</button>
               </div>
             </li>`
         )
@@ -693,8 +1103,12 @@ async function loadPendingReviews() {
               <div class="row">
                 <small>By: ${escapeHtml(review.customer?.name || 'Customer')}</small>
                 <div class="button-row">
-                  <button class="small" data-review-id="${escapeHtml(review._id)}" data-review-status="Approved">Approve</button>
-                  <button class="small secondary" data-review-id="${escapeHtml(review._id)}" data-review-status="Rejected">Reject</button>
+                  <button class="small" data-review-id="${escapeHtml(
+                    review._id
+                  )}" data-review-status="Approved">Approve</button>
+                  <button class="small secondary" data-review-id="${escapeHtml(
+                    review._id
+                  )}" data-review-status="Rejected">Reject</button>
                 </div>
               </div>
             </li>`
@@ -725,12 +1139,28 @@ async function loadAdminLocations() {
     : '<li>No locations found.</li>';
 }
 
+async function runStoreAction(storeId, action) {
+  await api(`/api/admin/stores/${storeId}/${action}`, { method: 'PATCH' });
+}
+
+function toPastTense(action) {
+  const mapping = {
+    approve: 'approved',
+    reject: 'rejected',
+    block: 'blocked',
+    unblock: 'unblocked'
+  };
+  return mapping[action] || action;
+}
+
 function initializeAdminPage() {
   const dashboardBtn = document.getElementById('dashboard-btn');
   const pendingBtn = document.getElementById('pending-btn');
+  const allStoresBtn = document.getElementById('all-stores-btn');
   const usersBtn = document.getElementById('users-btn');
   const pendingReviewsBtn = document.getElementById('pending-reviews-btn');
   const pendingList = document.getElementById('pending-list');
+  const allStoresList = document.getElementById('all-stores-list');
   const usersList = document.getElementById('users-list');
   const pendingReviewsList = document.getElementById('pending-reviews-list');
   const categoryForm = document.getElementById('category-form');
@@ -755,6 +1185,14 @@ function initializeAdminPage() {
     }
   });
 
+  allStoresBtn?.addEventListener('click', async () => {
+    try {
+      await loadAllStores();
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
   usersBtn?.addEventListener('click', async () => {
     try {
       await loadUsers();
@@ -771,24 +1209,31 @@ function initializeAdminPage() {
     }
   });
 
-  pendingList?.addEventListener('click', async (event) => {
-    const btn = event.target.closest('button[data-id]');
-    if (!btn) return;
+  function wireStoreListActions(container, afterAction) {
+    container?.addEventListener('click', async (event) => {
+      const btn = event.target.closest('button[data-store-id]');
+      if (!btn) return;
+      try {
+        await runStoreAction(btn.dataset.storeId, btn.dataset.storeAction);
+        showToast(`Store ${toPastTense(btn.dataset.storeAction)}.`);
+        await afterAction();
+        loadMyNotifications();
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
+  }
 
-    try {
-      await api(`/api/admin/stores/${btn.dataset.id}/${btn.dataset.action}`, { method: 'PATCH' });
-      showToast(`Store ${btn.dataset.action}d.`);
-      await loadPendingStores();
-    } catch (error) {
-      showToast(error.message, 'error');
-    }
-  });
+  wireStoreListActions(pendingList, loadPendingStores);
+  wireStoreListActions(allStoresList, loadAllStores);
 
   usersList?.addEventListener('click', async (event) => {
     const btn = event.target.closest('button[data-user-id]');
     if (!btn) return;
     try {
-      await api(`/api/admin/users/${btn.dataset.userId}/${btn.dataset.userAction}`, { method: 'PATCH' });
+      await api(`/api/admin/users/${btn.dataset.userId}/${btn.dataset.userAction}`, {
+        method: 'PATCH'
+      });
       showToast(`User ${btn.dataset.userAction}ed.`);
       await loadUsers();
     } catch (error) {
@@ -806,6 +1251,7 @@ function initializeAdminPage() {
       });
       showToast(`Review ${btn.dataset.reviewStatus.toLowerCase()}.`);
       await loadPendingReviews();
+      loadMyNotifications();
     } catch (error) {
       showToast(error.message, 'error');
     }
@@ -843,7 +1289,11 @@ function initializeAdminPage() {
     }
   });
 
-  Promise.all([loadAdminCategories(), loadAdminLocations()]).catch(() => {});
+  Promise.all([
+    loadAdminCategories(),
+    loadAdminLocations(),
+    api('/api/admin/dashboard').then(renderDashboard).catch(() => {})
+  ]).catch(() => {});
 }
 
 initializeTabs();

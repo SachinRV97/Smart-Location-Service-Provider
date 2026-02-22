@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Location Service Provider</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="hero">
     <h1>Smart Location Service Provider</h1>
-    <p>Discover nearby verified stores, submit businesses, and manage approvals on one platform.</p>
+    <p>Find verified local stores by state, city, or store name and navigate directly from map view.</p>
   </header>
 
   <nav class="top-nav">
@@ -20,29 +21,76 @@
     <a class="nav-link" href="/admin.html">Admin Portal</a>
   </nav>
 
-  <main class="layout single-column">
+  <main class="layout two-column">
     <section class="card">
-      <h2>Choose your page</h2>
-      <p class="hint">Each module matches the project synopsis: customer discovery, owner registration, and admin moderation.</p>
+      <h2>Search Nearby Stores</h2>
+      <p class="hint">Select state and city to auto-load stores on map.</p>
+      <form id="search-form" class="grid-form">
+        <label>Store / Shop Name
+          <input name="q" placeholder="Type store name, city, or category" />
+        </label>
+        <label>State
+          <select id="state-filter" name="state">
+            <option value="">All States</option>
+          </select>
+        </label>
+        <label>City
+          <select id="city-filter" name="city">
+            <option value="">All Cities</option>
+          </select>
+        </label>
+        <label>Category
+          <select id="category-filter" name="category">
+            <option value="">All Categories</option>
+          </select>
+        </label>
+        <label><input type="checkbox" name="openNow" /> Open now</label>
+        <label><input type="checkbox" name="topRated" /> Top rated</label>
+        <label><input type="checkbox" name="nearestFirst" /> Nearest first</label>
+        <input type="hidden" name="nearestLat" id="nearest-lat" />
+        <input type="hidden" name="nearestLng" id="nearest-lng" />
+        <div class="button-row">
+          <button type="submit">Search</button>
+          <button type="button" id="detect-location-btn" class="secondary">Use My Location</button>
+          <button type="button" id="my-favorites-btn" class="secondary">My Favorites</button>
+        </div>
+      </form>
+      <p class="hint" id="results-summary">Loading approved stores...</p>
+      <ul id="stores-list" class="list interactive-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Interactive Map</h2>
+      <div id="stores-map" class="map-box"></div>
+      <article id="store-detail" class="detail-card">
+        <h3>Store Details</h3>
+        <p class="hint">Click any map marker or store row to view complete details.</p>
+      </article>
+    </section>
+  </main>
+
+  <section class="layout single-column">
+    <section class="card">
+      <h2>Platform Modules</h2>
       <div class="page-grid">
         <a class="page-tile" href="/auth.html">
-          <h3>Authentication</h3>
-          <p>Register, login, and manage current session.</p>
-        </a>
-        <a class="page-tile" href="/stores.html">
-          <h3>Store Discovery</h3>
-          <p>Search approved stores by query, location, and category filters.</p>
+          <h3>Customer Authentication</h3>
+          <p>Create account, login, and access favorites and reviews.</p>
         </a>
         <a class="page-tile" href="/owner.html">
-          <h3>Owner Portal</h3>
-          <p>Submit new stores for review and moderation.</p>
+          <h3>Store Registration</h3>
+          <p>Owners can submit store details with map pin and business metadata.</p>
         </a>
         <a class="page-tile" href="/admin.html">
-          <h3>Admin Portal</h3>
-          <p>Load dashboard metrics and approve/reject pending stores.</p>
+          <h3>Admin Moderation</h3>
+          <p>Approve, reject, block stores and manage users, categories, and analytics.</p>
         </a>
       </div>
     </section>
-  </main>
+  </section>
+
+  <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
