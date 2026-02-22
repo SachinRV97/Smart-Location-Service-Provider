@@ -14,6 +14,22 @@ const state = {
 const toastEl = document.getElementById('toast');
 const userDisplays = [...document.querySelectorAll('#user-display')];
 
+const ROLE_HOME_PATHS = {
+  customer: '/stores.html',
+  owner: '/stores.html',
+  admin: '/admin.html'
+};
+
+const PROTECTED_PAGE_RULES = {
+  '/owner.html': ['owner', 'admin'],
+  '/admin.html': ['admin'],
+  '/admin-dashboard.html': ['admin'],
+  '/admin-stores.html': ['admin'],
+  '/admin-users.html': ['admin'],
+  '/admin-reviews.html': ['admin'],
+  '/admin-metadata.html': ['admin']
+};
+
 const DEFAULT_MARKER_STYLE = {
   radius: 8,
   color: '#1565c0',
@@ -61,6 +77,88 @@ function renderUser() {
   userDisplays.forEach((el) => {
     el.textContent = text;
   });
+  renderStoreAuthActions();
+}
+
+function renderStoreAuthActions() {
+  const loginBtn = document.getElementById('stores-login-btn');
+  const registerBtn = document.getElementById('stores-register-btn');
+  const logoutBtn = document.getElementById('stores-logout-btn');
+
+  if (!loginBtn && !registerBtn && !logoutBtn) {
+    return;
+  }
+
+  const isLoggedIn = Boolean(state.user);
+  if (loginBtn) loginBtn.hidden = isLoggedIn;
+  if (registerBtn) registerBtn.hidden = isLoggedIn;
+  if (logoutBtn) logoutBtn.hidden = !isLoggedIn;
+}
+
+function normalizeRole(value) {
+  const role = String(value || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(ROLE_HOME_PATHS, role) ? role : '';
+}
+
+function getRoleHomePath(role) {
+  return ROLE_HOME_PATHS[normalizeRole(role)] || '/stores.html';
+}
+
+function canRoleAccessPath(pathname, role) {
+  const requiredRoles = PROTECTED_PAGE_RULES[String(pathname || '').toLowerCase()];
+  if (!requiredRoles) {
+    return true;
+  }
+  return requiredRoles.includes(normalizeRole(role));
+}
+
+function getSafeNextPath(role) {
+  const params = new URLSearchParams(window.location.search);
+  const nextPath = params.get('next');
+  if (!nextPath || !nextPath.startsWith('/')) {
+    return '';
+  }
+  if (!canRoleAccessPath(nextPath, role)) {
+    return '';
+  }
+  return nextPath;
+}
+
+function redirectTo(path) {
+  if (!path || window.location.pathname === path) {
+    return;
+  }
+  window.location.assign(path);
+}
+
+function redirectToAuth(nextPath = window.location.pathname) {
+  redirectTo(`/auth.html?next=${encodeURIComponent(nextPath)}`);
+}
+
+function redirectAfterAuthSuccess() {
+  const role = normalizeRole(state.user?.role);
+  if (!role) {
+    return;
+  }
+  const nextPath = getSafeNextPath(role);
+  redirectTo(nextPath || getRoleHomePath(role));
+}
+
+function enforcePageRoleAccess(allowedRoles, pagePath) {
+  if (!state.user) {
+    showToast('Please login first.', 'error');
+    setTimeout(() => redirectToAuth(pagePath), 450);
+    return false;
+  }
+
+  const normalizedRole = normalizeRole(state.user.role);
+  if (!allowedRoles.includes(normalizedRole)) {
+    showToast(`Access denied for ${normalizedRole || 'current'} role. Redirecting...`, 'error');
+    setTimeout(() => redirectTo(getRoleHomePath(normalizedRole)), 450);
+    return false;
+  }
+
+  return true;
 }
 
 async function api(path, options = {}) {
@@ -74,9 +172,20 @@ async function api(path, options = {}) {
 
   const response = await fetch(path, { ...options, headers });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { message: text };
+    }
+  }
   if (!response.ok) {
-    throw new Error(payload?.message || 'Request failed');
+    const error = new Error(payload?.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.path = path;
+    error.method = String(options.method || 'GET').toUpperCase();
+    throw error;
   }
   return payload;
 }
@@ -95,13 +204,24 @@ function initializeTabs() {
   if (!tabs.length) return;
 
   tabs.forEach((button) => {
-    button.addEventListener('click', () => {
-      tabs.forEach((tab) => tab.classList.remove('is-active'));
-      document.querySelectorAll('.panel').forEach((panel) => panel.classList.add('hidden'));
-      button.classList.add('is-active');
-      document.getElementById(button.dataset.panel)?.classList.remove('hidden');
-    });
+    button.addEventListener('click', () => activateTab(button.dataset.panel));
   });
+}
+
+function activateTab(panelId) {
+  const tabs = document.querySelectorAll('.tab');
+  if (!tabs.length) return;
+
+  tabs.forEach((tab) => tab.classList.remove('is-active'));
+  document.querySelectorAll('.panel').forEach((panel) => panel.classList.add('hidden'));
+
+  const targetTab = [...tabs].find((button) => button.dataset.panel === panelId);
+  if (!targetTab) {
+    return;
+  }
+
+  targetTab.classList.add('is-active');
+  document.getElementById(panelId)?.classList.remove('hidden');
 }
 
 function fillSelect(selectEl, values, placeholderLabel) {
@@ -221,11 +341,20 @@ async function loadMyNotifications() {
 }
 
 function initializeAuthPage() {
+  const queryParams = new URLSearchParams(window.location.search);
+  const mode = queryParams.get('mode');
+  if (mode === 'login') {
+    activateTab('login-panel');
+  } else if (mode === 'register') {
+    activateTab('register-panel');
+  }
+
   const registerForm = document.getElementById('register-panel');
   if (registerForm) {
     registerForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const payload = formToObject(event.currentTarget);
+      const form = event.currentTarget;
+      const payload = formToObject(form);
 
       try {
         const data = await api('/api/auth/register', {
@@ -233,9 +362,10 @@ function initializeAuthPage() {
           body: JSON.stringify(payload)
         });
         setSession(data.token, data.user);
-        event.currentTarget.reset();
-        showToast('Registration successful.');
+        form.reset();
+        showToast('Registration successful. Redirecting...');
         loadMyNotifications();
+        setTimeout(() => redirectAfterAuthSuccess(), 450);
       } catch (error) {
         showToast(error.message, 'error');
       }
@@ -244,9 +374,18 @@ function initializeAuthPage() {
 
   const loginForm = document.getElementById('login-panel');
   if (loginForm) {
+    const loginRoleSelect = loginForm.querySelector('select[name="role"]');
+    const nextPath = queryParams.get('next');
+    if (loginRoleSelect && nextPath === '/owner.html') {
+      loginRoleSelect.value = 'owner';
+    } else if (loginRoleSelect && nextPath === '/admin.html') {
+      loginRoleSelect.value = 'admin';
+    }
+
     loginForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const payload = formToObject(event.currentTarget);
+      const form = event.currentTarget;
+      const payload = formToObject(form);
 
       try {
         const data = await api('/api/auth/login', {
@@ -254,9 +393,10 @@ function initializeAuthPage() {
           body: JSON.stringify(payload)
         });
         setSession(data.token, data.user);
-        event.currentTarget.reset();
-        showToast('Logged in successfully.');
+        form.reset();
+        showToast('Logged in successfully. Redirecting...');
         loadMyNotifications();
+        setTimeout(() => redirectAfterAuthSuccess(), 450);
       } catch (error) {
         showToast(error.message, 'error');
       }
@@ -565,10 +705,28 @@ function initializeStorePage() {
   const nearestLngInput = document.getElementById('nearest-lng');
   const detectBtn = document.getElementById('detect-location-btn');
   const favoritesBtn = document.getElementById('my-favorites-btn');
+  const loginBtn = document.getElementById('stores-login-btn');
+  const registerBtn = document.getElementById('stores-register-btn');
+  const storeLogoutBtn = document.getElementById('stores-logout-btn');
   const storesList = document.getElementById('stores-list');
   const detailEl = document.getElementById('store-detail');
   const queryInput = searchForm.querySelector('input[name="q"]');
   const filterCheckboxes = [...searchForm.querySelectorAll('input[type="checkbox"]')];
+
+  renderStoreAuthActions();
+
+  loginBtn?.addEventListener('click', () => {
+    redirectTo('/auth.html?mode=login');
+  });
+
+  registerBtn?.addEventListener('click', () => {
+    redirectTo('/auth.html?mode=register');
+  });
+
+  storeLogoutBtn?.addEventListener('click', () => {
+    setSession('', null);
+    showToast('Logged out.');
+  });
 
   loadMetaFilters({ stateSelect, citySelect, categorySelect }).catch((error) => {
     showToast(error.message, 'error');
@@ -671,18 +829,19 @@ function initializeStorePage() {
   });
 
   detailEl?.addEventListener('submit', async (event) => {
-    if (event.target.id !== 'review-form') return;
+    const form = event.target;
+    if (form.id !== 'review-form') return;
     event.preventDefault();
     if (!state.selectedStoreId) return;
 
-    const payload = formToObject(event.target);
+    const payload = formToObject(form);
     try {
       await api(`/api/reviews/${state.selectedStoreId}`, {
         method: 'POST',
         body: JSON.stringify(payload)
       });
       showToast('Review submitted for moderation.');
-      event.target.reset();
+      form.reset();
       await loadStoreDetail(state.selectedStoreId);
       loadMyNotifications();
     } catch (error) {
@@ -771,6 +930,7 @@ function prefillOwnerForm(storeForm) {
 function initializeOwnerPage() {
   const storeForm = document.getElementById('store-form');
   if (!storeForm) return;
+  if (!enforcePageRoleAccess(['owner', 'admin'], '/owner.html')) return;
 
   const stateSelect = document.getElementById('owner-state');
   const citySelect = document.getElementById('owner-city');
@@ -818,14 +978,15 @@ function initializeOwnerPage() {
 
   storeForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const payload = formToObject(event.currentTarget);
+    const form = event.currentTarget;
+    const payload = formToObject(form);
 
     try {
       await api('/api/stores', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      event.currentTarget.reset();
+      form.reset();
       prefillOwnerForm(storeForm);
       showToast('Store submitted. Waiting for admin approval.');
       loadOwnerStores(ownerStoreList);
@@ -976,11 +1137,6 @@ function renderDashboard(dashboard) {
       : '<li>No category data</li>';
   }
 
-  const rawOutputEl = document.getElementById('dashboard-output');
-  if (rawOutputEl) {
-    rawOutputEl.textContent = JSON.stringify(dashboard, null, 2);
-  }
-
   drawGrowthChart(dashboard.monthlyGrowth || []);
 }
 
@@ -1117,13 +1273,121 @@ async function loadPendingReviews() {
     : '<li>No pending reviews.</li>';
 }
 
+function isRouteNotFoundError(error) {
+  const message = String(error?.message || '');
+  return (
+    error?.status === 404 ||
+    error?.status === 405 ||
+    /route not found/i.test(message) ||
+    /cannot (patch|delete|put|post)/i.test(message) ||
+    /request failed \((404|405)\)/i.test(message)
+  );
+}
+
+async function updateAdminCategory(categoryId, payload) {
+  try {
+    await api(`/api/admin/categories/${categoryId}/update`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if (!isRouteNotFoundError(error)) throw error;
+    await api(`/api/admin/categories/${categoryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  }
+}
+
+async function deleteAdminCategory(categoryId) {
+  try {
+    await api(`/api/admin/categories/${categoryId}/delete`, { method: 'POST' });
+  } catch (error) {
+    if (!isRouteNotFoundError(error)) throw error;
+    await api(`/api/admin/categories/${categoryId}`, { method: 'DELETE' });
+  }
+}
+
+async function updateAdminLocation(locationId, payload) {
+  try {
+    await api(`/api/admin/locations/${locationId}/update`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if (!isRouteNotFoundError(error)) throw error;
+    await api(`/api/admin/locations/${locationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  }
+}
+
+async function deleteAdminLocation(locationId) {
+  try {
+    await api(`/api/admin/locations/${locationId}/delete`, { method: 'POST' });
+  } catch (error) {
+    if (!isRouteNotFoundError(error)) throw error;
+    await api(`/api/admin/locations/${locationId}`, { method: 'DELETE' });
+  }
+}
+
 async function loadAdminCategories() {
   const categoryList = document.getElementById('category-list');
   if (!categoryList) return;
 
   const categories = await api('/api/admin/categories');
   categoryList.innerHTML = categories.length
-    ? categories.map((item) => `<li>${escapeHtml(item.name)}</li>`).join('')
+    ? categories
+        .map(
+          (item) => `
+            <li>
+              <div class="row">
+                <strong>${escapeHtml(item.name)}</strong>
+                <div class="button-row">
+                  <button
+                    type="button"
+                    class="small secondary"
+                    data-category-id="${escapeHtml(item._id)}"
+                    data-category-action="start-edit"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="small danger"
+                    data-category-id="${escapeHtml(item._id)}"
+                    data-category-name="${escapeHtml(item.name)}"
+                    data-category-action="delete"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <form
+                class="inline-form metadata-edit-form hidden"
+                data-category-edit-form
+                data-category-id="${escapeHtml(item._id)}"
+              >
+                <input
+                  name="name"
+                  value="${escapeHtml(item.name)}"
+                  placeholder="Category name"
+                  required
+                />
+                <button type="submit" class="small">Save</button>
+                <button
+                  type="button"
+                  class="small secondary"
+                  data-category-id="${escapeHtml(item._id)}"
+                  data-category-action="cancel-edit"
+                >
+                  Cancel
+                </button>
+              </form>
+            </li>`
+        )
+        .join('')
     : '<li>No categories found.</li>';
 }
 
@@ -1134,7 +1398,61 @@ async function loadAdminLocations() {
   const locations = await api('/api/admin/locations');
   locationList.innerHTML = locations.length
     ? locations
-        .map((item) => `<li>${escapeHtml(item.state)} - ${escapeHtml(item.city)}</li>`)
+        .map(
+          (item) => `
+            <li>
+              <div class="row">
+                <strong>${escapeHtml(item.state)} - ${escapeHtml(item.city)}</strong>
+                <div class="button-row">
+                  <button
+                    type="button"
+                    class="small secondary"
+                    data-location-id="${escapeHtml(item._id)}"
+                    data-location-action="start-edit"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="small danger"
+                    data-location-id="${escapeHtml(item._id)}"
+                    data-location-state="${escapeHtml(item.state)}"
+                    data-location-city="${escapeHtml(item.city)}"
+                    data-location-action="delete"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <form
+                class="inline-form metadata-edit-form hidden"
+                data-location-edit-form
+                data-location-id="${escapeHtml(item._id)}"
+              >
+                <input
+                  name="state"
+                  value="${escapeHtml(item.state)}"
+                  placeholder="State"
+                  required
+                />
+                <input
+                  name="city"
+                  value="${escapeHtml(item.city)}"
+                  placeholder="City"
+                  required
+                />
+                <button type="submit" class="small">Save</button>
+                <button
+                  type="button"
+                  class="small secondary"
+                  data-location-id="${escapeHtml(item._id)}"
+                  data-location-action="cancel-edit"
+                >
+                  Cancel
+                </button>
+              </form>
+            </li>`
+        )
         .join('')
     : '<li>No locations found.</li>';
 }
@@ -1154,6 +1472,18 @@ function toPastTense(action) {
 }
 
 function initializeAdminPage() {
+  const pathname = String(window.location.pathname || '').toLowerCase();
+  const adminPages = new Set([
+    '/admin.html',
+    '/admin-dashboard.html',
+    '/admin-stores.html',
+    '/admin-users.html',
+    '/admin-reviews.html',
+    '/admin-metadata.html'
+  ]);
+  if (!adminPages.has(pathname)) return;
+  if (!enforcePageRoleAccess(['admin'], pathname)) return;
+
   const dashboardBtn = document.getElementById('dashboard-btn');
   const pendingBtn = document.getElementById('pending-btn');
   const allStoresBtn = document.getElementById('all-stores-btn');
@@ -1165,10 +1495,10 @@ function initializeAdminPage() {
   const pendingReviewsList = document.getElementById('pending-reviews-list');
   const categoryForm = document.getElementById('category-form');
   const locationForm = document.getElementById('location-form');
+  const categoryList = document.getElementById('category-list');
+  const locationList = document.getElementById('location-list');
 
-  if (!dashboardBtn) return;
-
-  dashboardBtn.addEventListener('click', async () => {
+  dashboardBtn?.addEventListener('click', async () => {
     try {
       const dashboard = await api('/api/admin/dashboard');
       renderDashboard(dashboard);
@@ -1259,13 +1589,14 @@ function initializeAdminPage() {
 
   categoryForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const payload = formToObject(event.currentTarget);
+    const form = event.currentTarget;
+    const payload = formToObject(form);
     try {
       await api('/api/admin/categories', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      event.currentTarget.reset();
+      form.reset();
       showToast('Category added.');
       await loadAdminCategories();
     } catch (error) {
@@ -1275,13 +1606,14 @@ function initializeAdminPage() {
 
   locationForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const payload = formToObject(event.currentTarget);
+    const form = event.currentTarget;
+    const payload = formToObject(form);
     try {
       await api('/api/admin/locations', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      event.currentTarget.reset();
+      form.reset();
       showToast('Location added.');
       await loadAdminLocations();
     } catch (error) {
@@ -1289,11 +1621,136 @@ function initializeAdminPage() {
     }
   });
 
-  Promise.all([
-    loadAdminCategories(),
-    loadAdminLocations(),
-    api('/api/admin/dashboard').then(renderDashboard).catch(() => {})
-  ]).catch(() => {});
+  categoryList?.addEventListener('click', async (event) => {
+    const btn = event.target.closest('button[data-category-id]');
+    if (!btn) return;
+
+    const { categoryId, categoryAction, categoryName } = btn.dataset;
+    if (!categoryId || !categoryAction) return;
+    const rowItem = btn.closest('li');
+
+    try {
+      if (categoryAction === 'start-edit') {
+        categoryList
+          .querySelectorAll('form[data-category-edit-form]')
+          .forEach((formEl) => formEl.classList.add('hidden'));
+        const editForm = rowItem?.querySelector('form[data-category-edit-form]');
+        editForm?.classList.remove('hidden');
+        editForm?.querySelector('input[name="name"]')?.focus();
+      } else if (categoryAction === 'cancel-edit') {
+        rowItem?.querySelector('form[data-category-edit-form]')?.classList.add('hidden');
+      } else if (categoryAction === 'delete') {
+        const isConfirmed = window.confirm(`Delete category "${categoryName || ''}"?`);
+        if (!isConfirmed) return;
+        await deleteAdminCategory(categoryId);
+        showToast('Category deleted.');
+        await loadAdminCategories();
+      }
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  categoryList?.addEventListener('submit', async (event) => {
+    const form = event.target.closest('form[data-category-edit-form]');
+    if (!form) return;
+    event.preventDefault();
+
+    const categoryId = form.dataset.categoryId;
+    const payload = formToObject(form);
+    const name = String(payload.name || '').trim();
+    if (!name || !categoryId) {
+      showToast('Category name is required.', 'error');
+      return;
+    }
+
+    try {
+      await updateAdminCategory(categoryId, { name });
+      showToast('Category updated.');
+      await loadAdminCategories();
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  locationList?.addEventListener('click', async (event) => {
+    const btn = event.target.closest('button[data-location-id]');
+    if (!btn) return;
+
+    const { locationId, locationAction, locationState, locationCity } = btn.dataset;
+    if (!locationId || !locationAction) return;
+    const rowItem = btn.closest('li');
+
+    try {
+      if (locationAction === 'start-edit') {
+        locationList
+          .querySelectorAll('form[data-location-edit-form]')
+          .forEach((formEl) => formEl.classList.add('hidden'));
+        const editForm = rowItem?.querySelector('form[data-location-edit-form]');
+        editForm?.classList.remove('hidden');
+        editForm?.querySelector('input[name="state"]')?.focus();
+      } else if (locationAction === 'cancel-edit') {
+        rowItem?.querySelector('form[data-location-edit-form]')?.classList.add('hidden');
+      } else if (locationAction === 'delete') {
+        const isConfirmed = window.confirm(
+          `Delete location "${locationState || ''} - ${locationCity || ''}"?`
+        );
+        if (!isConfirmed) return;
+        await deleteAdminLocation(locationId);
+        showToast('Location deleted.');
+        await loadAdminLocations();
+      }
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  locationList?.addEventListener('submit', async (event) => {
+    const form = event.target.closest('form[data-location-edit-form]');
+    if (!form) return;
+    event.preventDefault();
+
+    const locationId = form.dataset.locationId;
+    const payload = formToObject(form);
+    const stateName = String(payload.state || '').trim();
+    const cityName = String(payload.city || '').trim();
+    if (!stateName || !cityName || !locationId) {
+      showToast('Both state and city are required.', 'error');
+      return;
+    }
+
+    try {
+      await updateAdminLocation(locationId, { state: stateName, city: cityName });
+      showToast('Location updated.');
+      await loadAdminLocations();
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  });
+
+  if (dashboardBtn || document.getElementById('metric-total-stores')) {
+    api('/api/admin/dashboard')
+      .then(renderDashboard)
+      .catch((error) => showToast(error.message, 'error'));
+  }
+  if (pendingList) {
+    loadPendingStores().catch((error) => showToast(error.message, 'error'));
+  }
+  if (allStoresList) {
+    loadAllStores().catch((error) => showToast(error.message, 'error'));
+  }
+  if (usersList) {
+    loadUsers().catch((error) => showToast(error.message, 'error'));
+  }
+  if (pendingReviewsList) {
+    loadPendingReviews().catch((error) => showToast(error.message, 'error'));
+  }
+  if (categoryList || categoryForm) {
+    loadAdminCategories().catch((error) => showToast(error.message, 'error'));
+  }
+  if (locationList || locationForm) {
+    loadAdminLocations().catch((error) => showToast(error.message, 'error'));
+  }
 }
 
 initializeTabs();

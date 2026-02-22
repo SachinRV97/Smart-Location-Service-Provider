@@ -2,6 +2,12 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { signToken } = require('../utils/jwt');
 
+const LOGIN_ROLES = new Set(['customer', 'owner', 'admin']);
+
+function normalizeRole(role) {
+  return String(role || '').trim().toLowerCase();
+}
+
 async function register(req, res) {
   const { name, email, password, phone, role } = req.body;
   if (!name || !email || !password) {
@@ -37,9 +43,14 @@ async function register(req, res) {
 }
 
 async function login(req, res) {
-  const { email, password } = req.body;
+  const { email, password, role } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'email and password are required' });
+  }
+
+  const requestedRole = normalizeRole(role);
+  if (role !== undefined && !LOGIN_ROLES.has(requestedRole)) {
+    return res.status(400).json({ message: 'Invalid role. Use customer, owner, or admin' });
   }
 
   const user = await User.findOne({ email: email.toLowerCase() });
@@ -53,6 +64,12 @@ async function login(req, res) {
   const isValid = await bcrypt.compare(password, user.passwordHash);
   if (!isValid) {
     return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  if (requestedRole && user.role !== requestedRole) {
+    return res.status(403).json({
+      message: `Role mismatch. This account is registered as ${user.role}`
+    });
   }
 
   const token = signToken({ id: user._id, role: user.role, email: user.email });

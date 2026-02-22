@@ -24,6 +24,14 @@
   <main class="layout two-column">
     <section class="card">
       <h2>Find approved stores</h2>
+      <div class="session-box">
+        <p><strong>Current user:</strong> <span id="user-display">None</span></p>
+        <div class="button-row">
+          <button type="button" id="stores-login-btn" class="secondary">Login</button>
+          <button type="button" id="stores-register-btn" class="secondary">Register</button>
+          <button type="button" id="stores-logout-btn" class="secondary" hidden>Logout</button>
+        </div>
+      </div>
       <form id="search-form" class="grid-form">
         <label>Store Name
           <input name="q" placeholder="Search by name, city, category" />

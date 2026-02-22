@@ -12,11 +12,15 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
+const publicDir = path.join(__dirname, '..', 'public');
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('dev'));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(publicDir, 'stores.html'));
+});
+app.use(express.static(publicDir));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

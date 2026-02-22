@@ -176,6 +176,14 @@ button.secondary:hover {
   background: #32495f;
 }
 
+button.danger {
+  background: var(--danger);
+}
+
+button.danger:hover {
+  background: #a12834;
+}
+
 button.small {
   font-size: 0.78rem;
   padding: 0.36rem 0.56rem;
@@ -200,6 +208,10 @@ button.small {
 
 .panel.hidden {
   display: none;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .grid-form {
@@ -280,6 +292,16 @@ button.small {
 
 .compact-list li {
   padding: 0.55rem 0.7rem;
+}
+
+.metadata-edit-form {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+.metadata-edit-form input {
+  min-width: 180px;
 }
 
 .interactive-list li {

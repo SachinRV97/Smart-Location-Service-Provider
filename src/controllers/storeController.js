@@ -194,7 +194,7 @@ async function registerStore(req, res) {
     status: 'Pending'
   });
 
-  await Promise.all([
+  const postSaveTasks = await Promise.allSettled([
     Category.updateOne(
       { name: store.category },
       { $setOnInsert: { name: store.category, isActive: true } },
@@ -207,6 +207,12 @@ async function registerStore(req, res) {
     ),
     notifyAdminsAboutNewStore(store)
   ]);
+
+  postSaveTasks.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.error('registerStore post-save task failed:', result.reason?.message || result.reason);
+    }
+  });
 
   return res.status(201).json(store);
 }

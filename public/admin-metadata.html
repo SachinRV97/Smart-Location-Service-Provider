@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Metadata | Smart Location Service Provider</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="hero compact">
+    <h1>Metadata Management</h1>
+    <p>Manage categories and state/city data.</p>
+  </header>
+
+  <nav class="top-nav">
+    <a class="nav-link" href="/admin.html">Admin Portal</a>
+    <a class="nav-link" href="/admin-dashboard.html">Dashboard</a>
+    <a class="nav-link" href="/admin-stores.html">Stores</a>
+    <a class="nav-link" href="/admin-users.html">Users</a>
+    <a class="nav-link" href="/admin-reviews.html">Reviews</a>
+    <a class="nav-link is-active" href="/admin-metadata.html">Metadata</a>
+  </nav>
+
+  <main class="layout single-column">
+    <section class="card">
+      <div class="session-box">
+        <p><strong>Current user:</strong> <span id="user-display">None</span></p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Category Management</h3>
+      <p class="hint">Add new categories or use Edit/Delete on existing items.</p>
+      <form id="category-form" class="inline-form">
+        <input name="name" placeholder="New category name" required />
+        <button type="submit">Add Category</button>
+      </form>
+      <ul id="category-list" class="list compact-list"></ul>
+    </section>
+
+    <section class="card">
+      <h3>State/City Management</h3>
+      <p class="hint">Add new locations or use Edit/Delete on existing items.</p>
+      <form id="location-form" class="inline-form">
+        <input name="state" placeholder="State" required />
+        <input name="city" placeholder="City" required />
+        <button type="submit">Add Location</button>
+      </form>
+      <ul id="location-list" class="list compact-list"></ul>
+    </section>
+  </main>
+
+  <section id="toast" class="toast" aria-live="polite"></section>
+  <script src="/app.js"></script>
+</body>
+</html>

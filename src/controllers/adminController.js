@@ -275,6 +275,38 @@ async function createCategory(req, res) {
   return res.status(201).json(category);
 }
 
+async function updateCategory(req, res) {
+  const name = normalizeText(req.body?.name);
+  if (!name) {
+    return res.status(400).json({ message: 'Category name is required' });
+  }
+
+  const existingByName = await Category.findOne({ name }).select('_id');
+  if (existingByName && String(existingByName._id) !== req.params.id) {
+    return res.status(409).json({ message: 'Category name already exists' });
+  }
+
+  const category = await Category.findByIdAndUpdate(
+    req.params.id,
+    { name, isActive: true },
+    { new: true, runValidators: true }
+  );
+
+  if (!category) {
+    return res.status(404).json({ message: 'Category not found' });
+  }
+
+  return res.json(category);
+}
+
+async function deleteCategory(req, res) {
+  const category = await Category.findByIdAndDelete(req.params.id);
+  if (!category) {
+    return res.status(404).json({ message: 'Category not found' });
+  }
+  return res.json({ message: 'Category deleted' });
+}
+
 async function listLocations(req, res) {
   const locations = await Location.find().sort({ state: 1, city: 1 });
   return res.json(locations);
@@ -299,6 +331,39 @@ async function createLocation(req, res) {
     { upsert: true, new: true }
   );
   return res.status(201).json(location);
+}
+
+async function updateLocation(req, res) {
+  const state = normalizeText(req.body?.state);
+  const city = normalizeText(req.body?.city);
+  if (!state || !city) {
+    return res.status(400).json({ message: 'state and city are required' });
+  }
+
+  const existing = await Location.findOne({ state, city }).select('_id');
+  if (existing && String(existing._id) !== req.params.id) {
+    return res.status(409).json({ message: 'Location already exists' });
+  }
+
+  const location = await Location.findByIdAndUpdate(
+    req.params.id,
+    { state, city, isActive: true },
+    { new: true, runValidators: true }
+  );
+
+  if (!location) {
+    return res.status(404).json({ message: 'Location not found' });
+  }
+
+  return res.json(location);
+}
+
+async function deleteLocation(req, res) {
+  const location = await Location.findByIdAndDelete(req.params.id);
+  if (!location) {
+    return res.status(404).json({ message: 'Location not found' });
+  }
+  return res.json({ message: 'Location deleted' });
 }
 
 async function dashboard(req, res) {
@@ -438,7 +503,11 @@ module.exports = {
   moderateReview,
   listCategories,
   createCategory,
+  updateCategory,
+  deleteCategory,
   listLocations,
   createLocation,
+  updateLocation,
+  deleteLocation,
   dashboard
 };

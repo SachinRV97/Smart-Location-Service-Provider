@@ -123,6 +123,20 @@ npm install
 npm run dev
 ```
 
+### Optional: Seed Demo Data
+
+To quickly load sample users and data for all modules:
+
+```bash
+npm run seed:demo
+```
+
+Demo login credentials:
+
+- Admin: `admin.demo@slsp.local` / `Admin@123`
+- Owner: `owner.demo@slsp.local` / `Owner@123`
+- Customer: `customer.demo@slsp.local` / `Customer@123`
+
 3. Open in browser
 
 - Home: `http://localhost:5000/index.html`
