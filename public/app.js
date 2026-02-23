@@ -16,7 +16,7 @@ const userDisplays = [...document.querySelectorAll('#user-display')];
 
 const ROLE_HOME_PATHS = {
   customer: '/stores.html',
-  owner: '/stores.html',
+  owner: '/owner.html',
   admin: '/admin.html'
 };
 

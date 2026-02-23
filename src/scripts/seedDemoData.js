@@ -474,7 +474,7 @@ function printSummary(users, stores) {
 
   console.log('\nNotes:');
   console.log('- Admin login redirects to /admin.html');
-  console.log('- Owner and Customer login redirect to /stores.html');
+  console.log('- Owner login redirects to /owner.html; Customer login redirects to /stores.html');
   console.log('- Use Admin Metadata page to test add/edit/delete for category/location');
 }
 
